@@ -2,6 +2,7 @@ import './styles.css'
 import { initState } from './state'
 import { mountMap } from './ui/map'
 import { mountPanel } from './ui/panel'
+import { mountIntro } from './ui/intro'
 import type { DemandService } from './types'
 
 function emptyService(): DemandService {
@@ -30,8 +31,10 @@ app.innerHTML = `
     </div>
     <div id="panel" class="panel"></div>
   </div>
+  <div id="intro" class="intro" hidden></div>
 `
 
 initState({ service: emptyService(), mapMode: 'none', draftPolygon: [], issues: null })
 mountMap(document.getElementById('map')!)
 mountPanel(document.getElementById('panel')!, document.getElementById('map-overlay')!)
+mountIntro(document.getElementById('intro')!)

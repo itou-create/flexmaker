@@ -9,6 +9,7 @@ import { buildZip, downloadBytes } from '../gtfs/zip'
 import { getState, setState, subscribe, updateService } from '../state'
 import { PATTERN_LABEL, type DemandService, type OperationPattern, type ValidationIssue } from '../types'
 import { fitToService } from './map'
+import { LOGO_SVG, showIntro } from './intro'
 
 const DAY_LABEL = ['月', '火', '水', '木', '金', '土', '日']
 
@@ -126,21 +127,15 @@ function render(): void {
   <header class="panel-head">
     <div>
       <div class="title">
-        <span class="logo" aria-hidden="true">
-          <svg viewBox="0 0 26 26" fill="none">
-            <rect x="4" y="4" width="18" height="15" rx="4" fill="#fff"/>
-            <rect x="6.5" y="7" width="13" height="5.5" rx="1.5" fill="#cfeedb"/>
-            <rect x="7" y="14.5" width="3" height="2" rx="1" fill="#f3a4c0"/>
-            <rect x="16" y="14.5" width="3" height="2" rx="1" fill="#f3a4c0"/>
-            <circle cx="8.5" cy="20" r="2.2" fill="#fff" stroke="#227a4d" stroke-width="1.5"/>
-            <circle cx="17.5" cy="20" r="2.2" fill="#fff" stroke="#227a4d" stroke-width="1.5"/>
-          </svg>
-        </span>
+        <span class="logo" aria-hidden="true">${LOGO_SVG}</span>
         <h1>GTFS-Flex メーカー<span class="tag">試作</span></h1>
       </div>
       <p class="lead">デマンド交通の運行要領を、地図と数問の入力で GTFS-Flex にします。</p>
     </div>
-    <button type="button" data-act="load-example" class="link">サンプルを読み込む</button>
+    <div class="head-actions">
+      <button type="button" data-act="load-example" class="link">サンプルを読み込む</button>
+      <button type="button" data-act="show-intro" class="link">使い方</button>
+    </div>
   </header>
 
   <nav class="steps" aria-label="手順">
@@ -443,6 +438,9 @@ function onClick(e: Event): void {
     case 'load-example':
       setState({ service: exampleService(), draftPolygon: [], mapMode: 'none', issues: null })
       fitToService()
+      break
+    case 'show-intro':
+      showIntro()
       break
     case 'zone-start':
       setState({ mapMode: 'zone', draftPolygon: [] })
