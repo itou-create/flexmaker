@@ -125,7 +125,19 @@ function render(): void {
   <div class="panel-inner">
   <header class="panel-head">
     <div>
-      <h1>GTFS-Flex メーカー<span class="tag">試作</span></h1>
+      <div class="title">
+        <span class="logo" aria-hidden="true">
+          <svg viewBox="0 0 26 26" fill="none">
+            <rect x="4" y="4" width="18" height="15" rx="4" fill="#fff"/>
+            <rect x="6.5" y="7" width="13" height="5.5" rx="1.5" fill="#cfeedb"/>
+            <rect x="7" y="14.5" width="3" height="2" rx="1" fill="#f3a4c0"/>
+            <rect x="16" y="14.5" width="3" height="2" rx="1" fill="#f3a4c0"/>
+            <circle cx="8.5" cy="20" r="2.2" fill="#fff" stroke="#227a4d" stroke-width="1.5"/>
+            <circle cx="17.5" cy="20" r="2.2" fill="#fff" stroke="#227a4d" stroke-width="1.5"/>
+          </svg>
+        </span>
+        <h1>GTFS-Flex メーカー<span class="tag">試作</span></h1>
+      </div>
       <p class="lead">デマンド交通の運行要領を、地図と数問の入力で GTFS-Flex にします。</p>
     </div>
     <button type="button" data-act="load-example" class="link">サンプルを読み込む</button>

@@ -60,7 +60,7 @@ function render(): void {
   if (s.service.zone && s.service.zone.polygon.length >= 3) {
     zoneLayer = L.polygon(
       s.service.zone.polygon.map(([lng, lat]) => [lat, lng] as L.LatLngExpression),
-      { color: '#1f6b41', weight: 2, fillOpacity: 0.14 },
+      { color: '#34a06a', weight: 3, fillOpacity: 0.16 },
     ).addTo(map)
     zoneLayer.bindTooltip(s.service.zone.name, { permanent: false })
   }
@@ -72,16 +72,16 @@ function render(): void {
   draftVertices = []
   if (s.draftPolygon.length > 0) {
     const ll = s.draftPolygon.map(([lng, lat]) => [lat, lng] as L.LatLngExpression)
-    draftLayer = L.polyline(ll, { color: '#c2620c', weight: 2, dashArray: '6 4' }).addTo(map)
+    draftLayer = L.polyline(ll, { color: '#f08a3c', weight: 3, dashArray: '6 6' }).addTo(map)
     draftVertices = ll.map((p, i) =>
-      L.circleMarker(p, { radius: i === 0 ? 8 : 5, color: '#c2620c', weight: 2, fillColor: '#fff', fillOpacity: 1 }).addTo(map),
+      L.circleMarker(p, { radius: i === 0 ? 8 : 5, color: '#f08a3c', weight: 3, fillColor: '#fff', fillOpacity: 1 }).addTo(map),
     )
   }
 
   // 乗降場所
   stopLayer.clearLayers()
   for (const st of s.service.stops) {
-    L.circleMarker([st.lat, st.lon], { radius: 7, color: '#2148a8', weight: 2, fillColor: '#fff', fillOpacity: 1 })
+    L.circleMarker([st.lat, st.lon], { radius: 8, color: '#4a80e0', weight: 3, fillColor: '#fff', fillOpacity: 1 })
       .bindTooltip(st.name, { permanent: true, direction: 'top', offset: [0, -8], className: 'stop-label' })
       .addTo(stopLayer)
   }

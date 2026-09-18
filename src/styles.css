@@ -1,55 +1,64 @@
 /* ─────────────────────────────────────────────
    flexmaker  画面スタイル
    自治体の担当者がスマホで上から順に埋める前提。
-   色は「行政資料の緑」を軸に、地図の描画色（区域＝琥珀、場所＝藍）を分ける。
+   丸ゴシックと角丸で親しみやすく。色は「若葉の緑」を軸に、
+   地図の描画色（区域＝みかん色、場所＝そら色）を分ける。
    ───────────────────────────────────────────── */
 
 :root {
   color-scheme: light;
 
   /* 地色 */
-  --ground: #f3f6f2;        /* 緑に寄せたオフホワイト */
+  --ground: #eef6ef;        /* うすい若草色 */
   --surface: #ffffff;
-  --surface-2: #eaf0ea;
-  --line: #d6dfd7;
-  --line-strong: #b9c7bb;
+  --surface-2: #e4f0e6;
+  --line: #d3e4d6;
+  --line-strong: #b6d0bb;
 
   /* 文字 */
-  --ink: #17261d;
-  --ink-2: #4a5a50;
-  --muted: #71827a;
+  --ink: #22372b;
+  --ink-2: #4f6656;
+  --muted: #7d9184;
 
   /* アクセント（主役はひとつ） */
-  --green: #1f6b41;
-  --green-deep: #16522f;
-  --green-soft: #dcebe0;
-  --green-tint: #f0f6f1;
+  --green: #34a06a;
+  --green-deep: #227a4d;
+  --green-soft: #cfeedb;
+  --green-tint: #e9f7ee;
 
   /* 地図上の意味色（アクセントとは別） */
-  --zone: #c2620c;          /* 区域を描く＝琥珀 */
-  --zone-soft: #fbead8;
-  --stop: #2148a8;          /* 乗降場所＝藍 */
-  --stop-soft: #dfe6fb;
+  --zone: #f08a3c;          /* 区域を描く＝みかん色 */
+  --zone-soft: #ffe8d4;
+  --stop: #4a80e0;          /* 乗降場所＝そら色 */
+  --stop-soft: #dfe9ff;
+
+  /* ちいさな差し色 */
+  --pink: #f3a4c0;
+  --pink-soft: #ffe4ee;
+  --pink-ink: #b0416f;
 
   /* 状態色 */
-  --ok: #1f6b41;
-  --warn: #9a5b06;
-  --warn-soft: #fbf1dc;
-  --ng: #b3261e;
-  --ng-soft: #fbe4e2;
+  --ok: #2e9463;
+  --warn: #c98410;
+  --warn-soft: #fff1d6;
+  --ng: #d95a4f;
+  --ng-soft: #ffe4e0;
 
-  --radius: 10px;
-  --radius-sm: 6px;
-  --shadow: 0 1px 2px rgba(23, 38, 29, 0.06), 0 8px 24px -12px rgba(23, 38, 29, 0.25);
-  --font: "BIZ UDPGothic", "Hiragino Sans", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
+  --radius-xl: 22px;
+  --radius: 16px;
+  --radius-sm: 12px;
+  --shadow: 0 2px 4px rgba(34, 55, 43, 0.05), 0 10px 28px -14px rgba(34, 55, 43, 0.28);
+  --shadow-card: 0 1px 2px rgba(34, 55, 43, 0.04), 0 6px 18px -10px rgba(34, 55, 43, 0.18);
+  --font: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", "Meiryo", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
 body {
   font-family: var(--font);
+  font-weight: 500;
   font-size: 15px;
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--ink);
   background: var(--ground);
   -webkit-text-size-adjust: 100%;
@@ -65,21 +74,22 @@ body {
   grid-template-rows: 42vh 1fr;
 }
 .map-wrap { position: relative; min-height: 0; }
-.map { width: 100%; height: 100%; background: #e8ece7; }
+.map { width: 100%; height: 100%; background: #e6efe7; }
 .panel {
   position: relative;
   min-height: 0;
   overflow-y: auto;
-  background: var(--surface);
+  background: var(--ground);
   border-top: 1px solid var(--line);
   scroll-behavior: smooth;
 }
 @media (min-width: 900px) {
-  .layout { grid-template-rows: 1fr; grid-template-columns: 1fr minmax(400px, 460px); }
+  .layout { grid-template-rows: 1fr; grid-template-columns: 1fr minmax(400px, 470px); }
   .panel { border-top: 0; border-left: 1px solid var(--line); }
 }
 @media (prefers-reduced-motion: reduce) {
   .panel { scroll-behavior: auto; }
+  * { transition: none !important; }
 }
 
 /* ── 地図の上に浮かぶ操作チップ ─────────── */
@@ -104,38 +114,40 @@ body {
   background: var(--surface);
   color: var(--ink);
   box-shadow: var(--shadow);
-  border: 1.5px solid var(--line-strong);
+  border: 2px solid var(--line-strong);
   font-size: 13px;
 }
 .map-chip.zone { border-color: var(--zone); }
 .map-chip.stop { border-color: var(--stop); }
-.map-chip .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
-.map-chip.zone .dot { background: var(--zone); }
-.map-chip.stop .dot { background: var(--stop); }
+.map-chip .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; }
+.map-chip.zone .dot { background: var(--zone); box-shadow: 0 0 0 3px var(--zone-soft); }
+.map-chip.stop .dot { background: var(--stop); box-shadow: 0 0 0 3px var(--stop-soft); }
 .map-chip strong { font-weight: 700; }
 .map-chip .count { font-variant-numeric: tabular-nums; color: var(--muted); }
-.map-chip button { padding: 6px 10px; font-size: 13px; border-radius: 999px; }
+.map-chip button { padding: 6px 12px; font-size: 13px; }
 
 /* Leaflet の状態表示 */
 .leaflet-container { font-family: var(--font); }
 .leaflet-container.mode-zone, .leaflet-container.mode-stop { cursor: crosshair; }
-.leaflet-container.mode-zone { box-shadow: inset 0 0 0 3px var(--zone); }
-.leaflet-container.mode-stop { box-shadow: inset 0 0 0 3px var(--stop); }
+.leaflet-container.mode-zone { box-shadow: inset 0 0 0 4px var(--zone); }
+.leaflet-container.mode-stop { box-shadow: inset 0 0 0 4px var(--stop); }
+.leaflet-bar { border: 0 !important; border-radius: 12px !important; box-shadow: var(--shadow) !important; overflow: hidden; }
+.leaflet-bar a { color: var(--ink-2) !important; font-weight: 700; }
 .stop-label {
   font-family: var(--font);
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 2px 8px;
   color: var(--stop);
-  border: 1px solid var(--stop-soft);
-  border-radius: 4px;
+  border: 2px solid var(--stop-soft);
+  border-radius: 999px;
   box-shadow: none;
 }
 .stop-label::before { display: none; }
 
 /* ── パネルの中身 ───────────────────────── */
 .panel-inner {
-  padding: 0 16px 96px;       /* 下は固定バーの分を空ける */
+  padding: 0 14px 100px;      /* 下は固定バーの分を空ける */
   max-width: 560px;
   margin: 0 auto;
 }
@@ -145,34 +157,46 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 0 12px;
+  padding: 18px 4px 12px;
 }
+.panel-head .title { display: flex; align-items: center; gap: 10px; }
+.panel-head .logo {
+  flex: none;
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  background: var(--green);
+  box-shadow: 0 4px 10px -4px rgba(52, 160, 106, 0.6);
+}
+.panel-head .logo svg { width: 26px; height: 26px; display: block; }
 .panel-head h1 {
   margin: 0;
   font-size: 19px;
   line-height: 1.3;
+  font-weight: 700;
   letter-spacing: 0.01em;
   text-wrap: balance;
 }
 .panel-head h1 .tag { margin-left: 8px; }
-.panel-head .lead { margin: 4px 0 0; font-size: 13px; color: var(--ink-2); }
+.panel-head .lead { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
 .tag {
   display: inline-block;
-  padding: 1px 7px;
+  padding: 2px 9px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
   border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--ink-2);
+  background: var(--pink-soft);
+  color: var(--pink-ink);
   vertical-align: middle;
 }
+.card-head .tag { background: var(--surface-2); color: var(--ink-2); }
 
 /* 手順の進み具合（本当に順番があるので番号を使う） */
 .steps {
   display: flex;
   gap: 6px;
-  padding: 4px 0 14px;
+  padding: 4px 2px 14px;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -183,72 +207,75 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px 5px 6px;
+  padding: 5px 12px 5px 6px;
   font-size: 12px;
   font-weight: 700;
   color: var(--ink-2);
-  background: var(--surface-2);
-  border: 1px solid transparent;
+  background: var(--surface);
+  border: 2px solid var(--line);
   border-radius: 999px;
   cursor: pointer;
+  transition: transform 0.12s, border-color 0.12s;
 }
+.step:hover { transform: translateY(-1px); border-color: var(--line-strong); }
 .step .n {
   display: inline-grid;
   place-items: center;
-  width: 18px; height: 18px;
+  width: 20px; height: 20px;
   font-size: 11px;
   border-radius: 50%;
-  background: var(--surface);
+  background: var(--surface-2);
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
 }
-.step.done { background: var(--green-soft); color: var(--green-deep); }
+.step.done { background: var(--green-tint); border-color: var(--green-soft); color: var(--green-deep); }
 .step.done .n { background: var(--green); color: #fff; }
 .step.skip { opacity: 0.5; }
-.step:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.step:focus-visible { outline: 3px solid var(--green-soft); outline-offset: 1px; }
 
 /* はじめての案内 */
 .welcome {
   display: flex;
   gap: 12px;
   align-items: center;
-  padding: 12px 14px;
-  margin-bottom: 14px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
   border-radius: var(--radius);
-  background: var(--green-tint);
-  border: 1px solid var(--green-soft);
+  background: var(--surface);
+  border: 2px dashed var(--green-soft);
   font-size: 13px;
   color: var(--ink-2);
 }
 .welcome p { margin: 0; flex: 1; }
 .welcome strong { color: var(--green-deep); }
 
-/* セクション */
+/* セクション：白いカードを並べる */
 section.card {
-  padding: 16px 0 18px;
-  border-top: 1px solid var(--line);
+  padding: 16px 16px 18px;
+  margin-bottom: 12px;
+  background: var(--surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card);
 }
-section.card:first-of-type { border-top: 0; }
 .card-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .card-head .num {
   flex: none;
   display: inline-grid;
   place-items: center;
-  width: 24px; height: 24px;
-  font-size: 12px;
+  width: 30px; height: 30px;
+  font-size: 13px;
   font-weight: 700;
   border-radius: 50%;
   background: var(--surface-2);
   color: var(--ink-2);
-  align-self: center;
   font-variant-numeric: tabular-nums;
 }
-.card-head .num.done { background: var(--green); color: #fff; }
+.card-head .num.done { background: var(--green); color: #fff; box-shadow: 0 3px 8px -3px rgba(52, 160, 106, 0.7); }
 .card-head h2 {
   margin: 0;
   font-size: 16px;
@@ -256,7 +283,7 @@ section.card:first-of-type { border-top: 0; }
   color: var(--ink);
   flex: 1;
 }
-.card-head .tag { align-self: center; }
+section.card.skip { background: transparent; box-shadow: none; border: 2px dashed var(--line); }
 section.card.skip .card-head h2 { color: var(--muted); }
 .skip-note { margin: 0; font-size: 13px; color: var(--muted); }
 .hint { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
@@ -271,23 +298,26 @@ section.card.skip .card-head h2 { color: var(--muted); }
   color: var(--ink-2);
   margin-bottom: 4px;
 }
-.field > span .opt { font-weight: 400; color: var(--muted); margin-left: 4px; }
+.field > span .opt { font-weight: 500; color: var(--muted); margin-left: 4px; }
 input[type=text], input[type=url], input[type=tel], input[type=number], input[type=time], input:not([type]) {
   display: block;
   width: 100%;
-  padding: 10px 12px;
+  padding: 10px 14px;
   font: inherit;
   font-size: 16px;               /* iOS でズームしないための下限 */
   color: var(--ink);
-  background: var(--surface);
-  border: 1px solid var(--line-strong);
+  background: var(--ground);
+  border: 2px solid transparent;
   border-radius: var(--radius-sm);
-  transition: border-color 0.12s, box-shadow 0.12s;
+  transition: border-color 0.12s, background 0.12s, box-shadow 0.12s;
 }
+input::placeholder { color: #a9bbae; }
+input:hover { background: var(--surface-2); }
 input:focus-visible {
   outline: none;
+  background: var(--surface);
   border-color: var(--green);
-  box-shadow: 0 0 0 3px var(--green-soft);
+  box-shadow: 0 0 0 4px var(--green-soft);
 }
 input[inputmode=numeric], input[type=number], input[type=time] { font-variant-numeric: tabular-nums; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
@@ -300,44 +330,46 @@ input[inputmode=numeric], input[type=number], input[type=time] { font-variant-nu
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   margin: 0 0 8px;
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface);
   cursor: pointer;
   font-size: 14px;
   transition: border-color 0.12s, background 0.12s;
 }
+.choice:hover { border-color: var(--line-strong); }
 .choice:has(input:checked) { border-color: var(--green); background: var(--green-tint); }
-.choice:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--green-soft); }
-.choice input { margin: 3px 0 0; accent-color: var(--green); flex: none; }
-.choice .body { flex: 1; min-width: 0; }
-.choice .body small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.choice:has(input:focus-visible) { box-shadow: 0 0 0 4px var(--green-soft); }
+.choice input { margin: 4px 0 0; accent-color: var(--green); flex: none; width: 18px; height: 18px; }
+.choice .body { flex: 1; min-width: 0; font-weight: 700; }
+.choice .body small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 500; }
 
 /* 運行形態：図つきの4択 */
 .patterns { display: grid; gap: 8px; }
 .pattern {
   display: grid;
-  grid-template-columns: auto 64px 1fr;
+  grid-template-columns: auto 68px 1fr;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  padding: 10px 14px;
+  border: 2px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
   cursor: pointer;
-  transition: border-color 0.12s, background 0.12s;
+  transition: border-color 0.12s, background 0.12s, transform 0.12s;
 }
-.pattern:has(input:checked) { border-color: var(--green); background: var(--green-tint); box-shadow: inset 0 0 0 1px var(--green); }
-.pattern:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--green-soft); }
-.pattern input { accent-color: var(--green); margin: 0; }
-.pattern svg { width: 64px; height: 36px; display: block; }
+.pattern:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+.pattern:has(input:checked) { border-color: var(--green); background: var(--green-tint); }
+.pattern:has(input:focus-visible) { box-shadow: 0 0 0 4px var(--green-soft); }
+.pattern input { accent-color: var(--green); margin: 0; width: 18px; height: 18px; }
+.pattern svg { width: 68px; height: 38px; display: block; }
 .pattern .label { font-size: 14px; font-weight: 700; line-height: 1.35; }
-.pattern .sub { font-size: 12px; color: var(--muted); font-weight: 400; }
-.pattern .z { fill: var(--zone-soft); stroke: var(--zone); stroke-width: 1.5; stroke-dasharray: 3 2; }
-.pattern .p { fill: var(--stop); }
-.pattern .a { fill: none; stroke: var(--ink-2); stroke-width: 1.5; }
+.pattern .sub { font-size: 12px; color: var(--muted); font-weight: 500; }
+.pattern .z { fill: var(--zone-soft); stroke: var(--zone); stroke-width: 2; stroke-dasharray: 3 3; stroke-linejoin: round; }
+.pattern .p { fill: var(--stop); stroke: #fff; stroke-width: 1.5; }
+.pattern .a { fill: none; stroke: var(--ink-2); stroke-width: 2; stroke-linecap: round; }
 .pattern .ah { fill: var(--ink-2); }
 
 /* 地図で置くものの状態表示 */
@@ -346,9 +378,9 @@ input[inputmode=numeric], input[type=number], input[type=time] { font-variant-nu
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-radius: var(--radius-sm);
-  background: var(--surface-2);
+  background: var(--ground);
   font-size: 13px;
 }
 .map-status.active-zone { background: var(--zone-soft); }
@@ -357,15 +389,17 @@ input[inputmode=numeric], input[type=number], input[type=time] { font-variant-nu
 .map-status .count { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 /* 乗降場所の一覧 */
-ul.stops { list-style: none; padding: 0; margin: 10px 0 0; }
+ul.stops { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
 ul.stops li {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px dashed var(--line);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--ground);
   font-size: 14px;
+  font-weight: 700;
 }
 ul.stops li .pin {
   width: 12px; height: 12px; border-radius: 50%;
@@ -375,35 +409,42 @@ ul.stops li small {
   display: block;
   color: var(--muted);
   font-size: 11px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 ul.stops:empty { display: none; }
 
 /* 曜日 */
-.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 10px; }
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 10px; }
 .day {
   position: relative;
   text-align: center;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
-  padding: 9px 0;
-  border: 1px solid var(--line);
+  padding: 10px 0;
+  border: 2px solid var(--line);
   border-radius: var(--radius-sm);
   color: var(--ink-2);
   cursor: pointer;
   user-select: none;
+  transition: background 0.12s, border-color 0.12s, transform 0.12s;
 }
+.day:hover { transform: translateY(-1px); }
 .day input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
 .day:has(input:checked) { background: var(--green); border-color: var(--green); color: #fff; }
-.day:has(input:focus-visible) { box-shadow: 0 0 0 3px var(--green-soft); }
+.day:has(input:focus-visible) { box-shadow: 0 0 0 4px var(--green-soft); }
 .day.sat:not(:has(input:checked)) { color: var(--stop); }
 .day.sun:not(:has(input:checked)) { color: var(--ng); }
 
 /* 時間帯 */
-ul.windows { list-style: none; padding: 0; margin: 6px 0 8px; display: grid; gap: 6px; }
+ul.windows { list-style: none; padding: 0; margin: 6px 0 10px; display: grid; gap: 6px; }
 ul.windows li { display: flex; align-items: center; gap: 8px; }
-ul.windows li .trip { flex: none; font-size: 12px; color: var(--muted); width: 3.2em; font-variant-numeric: tabular-nums; }
-ul.windows li input[type=time] { flex: 1; min-width: 0; padding: 8px 10px; }
+ul.windows li .trip {
+  flex: none; font-size: 12px; font-weight: 700; color: var(--green-deep);
+  background: var(--green-tint); padding: 2px 8px; border-radius: 999px;
+  font-variant-numeric: tabular-nums;
+}
+ul.windows li input[type=time] { flex: 1; min-width: 0; padding: 8px 12px; }
 ul.windows li .tilde { color: var(--muted); }
 
 /* ボタン */
@@ -411,46 +452,52 @@ button {
   font: inherit;
   font-size: 14px;
   font-weight: 700;
-  padding: 9px 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--green);
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 2px solid var(--green);
   background: var(--surface);
   color: var(--green-deep);
   cursor: pointer;
-  transition: background 0.12s, border-color 0.12s, transform 0.05s;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s, box-shadow 0.12s;
   touch-action: manipulation;
 }
-button:hover { background: var(--green-tint); }
+button:hover { background: var(--green-tint); transform: translateY(-1px); }
 button:active { transform: translateY(1px); }
-button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
-button.primary { background: var(--green); color: #fff; border-color: var(--green); }
-button.primary:hover { background: var(--green-deep); }
-button.secondary { border-color: var(--line-strong); color: var(--ink-2); }
-button.secondary:hover { background: var(--surface-2); }
-button.zone { border-color: var(--zone); color: var(--zone); }
+button:focus-visible { outline: 3px solid var(--green-soft); outline-offset: 1px; }
+button.primary {
+  background: var(--green); color: #fff; border-color: var(--green);
+  box-shadow: 0 4px 12px -4px rgba(52, 160, 106, 0.7);
+}
+button.primary:hover { background: var(--green-deep); border-color: var(--green-deep); }
+button.secondary { border-color: var(--line); color: var(--ink-2); }
+button.secondary:hover { background: var(--surface-2); border-color: var(--line-strong); }
+button.zone { border-color: var(--zone); color: #c2620c; }
 button.zone:hover { background: var(--zone-soft); }
 button.stop { border-color: var(--stop); color: var(--stop); }
 button.stop:hover { background: var(--stop-soft); }
-button.link { border: 0; padding: 4px 0; background: none; text-decoration: underline; text-underline-offset: 3px; font-size: 13px; font-weight: 700; }
-button.link:hover { background: none; color: var(--green); }
-button:disabled { opacity: 0.4; cursor: default; transform: none; }
+button.link {
+  border: 0; padding: 6px 12px; background: var(--surface);
+  font-size: 13px; color: var(--green-deep); box-shadow: var(--shadow-card);
+}
+button.link:hover { background: var(--green-tint); }
+button:disabled { opacity: 0.4; cursor: default; transform: none; box-shadow: none; }
 button.x {
   border: 0; background: none; color: var(--muted);
-  font-size: 18px; line-height: 1; padding: 4px 8px; font-weight: 400;
+  font-size: 18px; line-height: 1; padding: 4px 10px; font-weight: 500;
 }
-button.x:hover { color: var(--ng); background: var(--ng-soft); }
+button.x:hover { color: var(--ng); background: var(--ng-soft); transform: none; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 /* 検証結果 */
 .result { margin-top: 12px; }
 .result .ok {
   display: flex; gap: 10px; align-items: flex-start;
-  padding: 10px 12px; border-radius: var(--radius-sm);
-  background: var(--green-tint); border: 1px solid var(--green-soft);
-  color: var(--green-deep); font-size: 13px; margin: 0;
+  padding: 12px 14px; border-radius: var(--radius-sm);
+  background: var(--green-tint); border: 2px solid var(--green-soft);
+  color: var(--green-deep); font-size: 13px; font-weight: 700; margin: 0;
 }
 .result .ng-head {
-  margin: 0 0 6px; font-weight: 700; color: var(--ng); font-size: 14px;
+  margin: 0 0 8px; font-weight: 700; color: var(--ng); font-size: 14px;
 }
 .issues { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .issues li {
@@ -458,27 +505,26 @@ button.x:hover { color: var(--ng); background: var(--ng-soft); }
   grid-template-columns: auto 1fr;
   gap: 8px;
   align-items: start;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: var(--radius-sm);
   font-size: 13px;
-  border-left: 3px solid;
 }
-.issues li.error { background: var(--ng-soft); border-color: var(--ng); color: #6b1b16; }
-.issues li.warning { background: var(--warn-soft); border-color: var(--warn); color: #5c3a06; }
+.issues li.error { background: var(--ng-soft); color: #7a2a24; }
+.issues li.warning { background: var(--warn-soft); color: #6b4506; }
 .issues .lvl {
   font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
-  padding: 1px 6px; border-radius: 4px; margin-top: 1px; white-space: nowrap;
+  padding: 2px 8px; border-radius: 999px; margin-top: 1px; white-space: nowrap;
 }
 .issues li.error .lvl { background: var(--ng); color: #fff; }
 .issues li.warning .lvl { background: var(--warn); color: #fff; }
 .issues code {
-  font-size: 11px; background: rgba(255, 255, 255, 0.6);
-  padding: 1px 5px; border-radius: 3px; margin-right: 4px;
+  font-size: 11px; background: rgba(255, 255, 255, 0.7);
+  padding: 1px 6px; border-radius: 6px; margin-right: 4px;
 }
 .note {
   margin: 12px 0 0; font-size: 12px; color: var(--muted);
 }
-.note a { color: var(--green-deep); }
+.note a { color: var(--green-deep); font-weight: 700; }
 
 /* 下に固定する操作バー */
 .actionbar {
@@ -488,17 +534,17 @@ button.x:hover { color: var(--ng); background: var(--ng-soft); }
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 -16px;
+  margin: 0 -14px;
   padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(8px);
+  background: rgba(238, 246, 239, 0.9);
+  backdrop-filter: blur(10px);
   border-top: 1px solid var(--line);
 }
 .actionbar .status { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); }
 .actionbar .status.ok { color: var(--ok); font-weight: 700; }
 .actionbar .status.ng { color: var(--ng); font-weight: 700; }
 .actionbar button { flex: none; }
-.actionbar button.primary { padding-inline: 16px; }
+.actionbar button.primary { padding-inline: 18px; }
 @media (max-width: 380px) {
   .actionbar .status { display: none; }
   .actionbar button { flex: 1; }
