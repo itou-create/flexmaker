@@ -1,0 +1,22 @@
+{
+  "name": "flexmaker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "スマホ・Webからデマンド交通の GTFS-Flex データを作るツール（仮称）",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "fetch-samples": "node scripts/fetch-samples.mjs"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.12",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}
