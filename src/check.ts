@@ -3,12 +3,15 @@
 //
 // 作成画面（main.ts）とは入口を分け、GTFS の読み側（flexReader の FlexView）だけを共有する。
 // 画面に GTFS の項目名は出さない（CLAUDE.md 設計原則1）。高齢の方が読める文字と言葉で。
-// データはデモ用に同梱した public/data/*.json（ODPT・CC BY 4.0。出典表示は必須）。
+// データは2通り：
+//   - デモ用に同梱した public/data/*.json（ODPT・CC BY 4.0。出典表示は必須）
+//   - #preview で開かれたとき：作成画面が localStorage に置いた作りかけデータ（src/preview.ts）
 
 import './styles.css'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { FlexView, ViewArea, ViewStop } from './gtfs/flexReader.ts'
+import { loadPreview } from './preview'
 
 interface DemoSource {
   municipality: string
@@ -20,7 +23,8 @@ interface DemoSource {
   fetchedOn: string
 }
 interface DemoData {
-  source: DemoSource
+  /** 同梱データのときだけある。無ければプレビュー表示 */
+  source?: DemoSource
   view: FlexView
 }
 
@@ -133,7 +137,9 @@ function renderMap(): void {
       { color: '#34a06a', weight: 3, fillOpacity: 0.14 },
     ).addTo(stopLayer)
   }
-  for (const st of area.board.stops) {
+  const mapStops = [...area.board.stops]
+  for (const st of area.alight.stops) if (!mapStops.some((x) => x.id === st.id)) mapStops.push(st)
+  for (const st of mapStops) {
     L.circleMarker([st.lat, st.lon], { radius: 6, color: '#4a80e0', weight: 2, fillColor: '#fff', fillOpacity: 1 })
       .bindTooltip(st.name, { direction: 'top', offset: [0, -6] })
       .addTo(stopLayer)
@@ -182,6 +188,15 @@ function pickedCard(): string {
       ? `<p class="check-yes">この場所は、乗れる範囲の<b>中</b>です 🙆</p>`
       : `<p class="check-no">この場所は、乗れる範囲の<b>外</b>のようです。下の乗り場までお越しください。</p>`
   }
+  // 決まった乗り場が無い形態（区域内どこでも乗車）は、区域の中か外かだけを伝える
+  if (area.board.stops.length === 0 && zones.length > 0) {
+    return `<section class="check-card">
+      <h2>この場所から乗れる？</h2>
+      ${zoneLine}
+      <p class="check-small">この乗りものは決まった乗り場がなく、色のついた範囲の中から乗れます（予約制）。</p>
+    </section>`
+  }
+
   const near = nearestStops(picked.lat, picked.lon, area.board.stops, 3)
 
   // いちばん近い乗り場まで歩けない距離なら、徒歩何分とは言わずに「エリアの外」と伝える
@@ -230,7 +245,17 @@ function renderPanel(): void {
     b?.infoUrl ? `<p><a href="${esc(b.infoUrl)}" target="_blank" rel="noopener">くわしい案内を見る</a></p>` : '',
   ].join('')
 
+  const footer = s
+    ? `<footer class="check-foot">
+      <p>このページは公式の案内ではありません。最新の運行・予約方法は ${esc(s.provider)} の案内でご確認ください。</p>
+      <p>データ出典：${esc(s.provider)}「${esc(s.serviceName)}」（<a href="${esc(s.datasetUrl)}" target="_blank" rel="noopener">公共交通オープンデータセンター</a>、<a href="${esc(s.licenseUrl)}" target="_blank" rel="noopener">${esc(s.license)}</a>）／ ${esc(s.fetchedOn)} 取得</p>
+    </footer>`
+    : `<footer class="check-foot">
+      <p>これは作成画面で入力中のデータのプレビューです。保存も公開もされていません。内容を直すときは、作成画面のタブに戻ってください。</p>
+    </footer>`
+
   panel.innerHTML = `
+    ${s ? '' : '<div class="check-preview-band">プレビュー — 作成中のデータを表示しています</div>'}
     ${pickedCard()}
     <section class="check-card">
       <h2>いつ走っている？</h2>
@@ -240,24 +265,40 @@ function renderPanel(): void {
       <h2>予約のしかた</h2>
       ${bookingLines}
     </section>
-    <footer class="check-foot">
-      <p>このページは公式の案内ではありません。最新の運行・予約方法は ${esc(s.provider)} の案内でご確認ください。</p>
-      <p>データ出典：${esc(s.provider)}「${esc(s.serviceName)}」（<a href="${esc(s.datasetUrl)}" target="_blank" rel="noopener">公共交通オープンデータセンター</a>、<a href="${esc(s.licenseUrl)}" target="_blank" rel="noopener">${esc(s.license)}</a>）／ ${esc(s.fetchedOn)} 取得</p>
-    </footer>
+    ${footer}
   `
 }
 
 async function main(): Promise<void> {
   mountMap()
-  const res = await fetch('./data/mizuho_town_mizuho_area.json')
-  if (!res.ok) {
-    sub.textContent = 'データを読み込めませんでした'
-    return
+
+  if (location.hash === '#preview') {
+    // 作成画面からのプレビュー（src/preview.ts が localStorage に置いたデータ）
+    const p = loadPreview()
+    if (!p || p.view.areas.length === 0) {
+      sub.textContent = 'プレビューのデータが見つかりません'
+      panel.innerHTML = `<section class="check-card">
+        <h2>プレビューのデータがありません</h2>
+        <p class="check-big">作成画面の「住民ページで見る」ボタンから開いてください。</p>
+      </section>`
+      return
+    }
+    data = { view: p.view }
+    area = p.view.areas[0]
+    const name = area.name || '作成中のサービス'
+    sub.textContent = `${p.view.agencyName ? p.view.agencyName + ' ' : ''}「${name}」のプレビュー`
+    document.title = `うちから乗れる？ — ${name}（プレビュー）`
+  } else {
+    const res = await fetch('./data/mizuho_town_mizuho_area.json')
+    if (!res.ok) {
+      sub.textContent = 'データを読み込めませんでした'
+      return
+    }
+    data = (await res.json()) as DemoData
+    area = data.view.areas[0]
+    sub.textContent = `${data.source!.municipality}「${data.source!.serviceName}」`
+    document.title = `うちから乗れる？ — ${data.source!.serviceName}`
   }
-  data = (await res.json()) as DemoData
-  area = data.view.areas[0]
-  sub.textContent = `${data.source.municipality}「${data.source.serviceName}」`
-  document.title = `うちから乗れる？ — ${data.source.serviceName}`
   renderMap()
   renderPanel()
 
@@ -265,7 +306,9 @@ async function main(): Promise<void> {
   // （そのまま fitBounds すると最大ズームに飛ぶ）。サイズが付いてから一度だけ全体に寄せる。
   // ResizeObserver は画面回転やパネルの伸縮でも invalidateSize してくれる
   const fitArea = (): void => {
-    const pts = area.board.stops.map((st) => [st.lat, st.lon] as L.LatLngExpression)
+    const pts: L.LatLngExpression[] = [...area.board.stops, ...area.alight.stops].map((st) => [st.lat, st.lon])
+    for (const z of [...area.board.zones, ...area.alight.zones])
+      for (const ring of z.rings) for (const [lng, lat] of ring) pts.push([lat, lng])
     if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [20, 20], animate: false })
     else map.setView([35.77, 139.35], 13, { animate: false })
   }

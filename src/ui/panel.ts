@@ -3,9 +3,11 @@
 // 地図の上に浮かぶ操作チップ（区域を描く／場所を置く）も、ここから同じ状態で描く。
 
 import { buildFlexFiles, needsStops, needsZone } from '../gtfs/flexWriter'
+import { readFlexFiles } from '../gtfs/flexReader.ts'
 import { exampleService } from '../gtfs/example'
 import { validateFlexFiles } from '../gtfs/validate'
 import { buildZip, downloadBytes } from '../gtfs/zip'
+import { savePreview } from '../preview'
 import { getState, setState, subscribe, updateService } from '../state'
 import { PATTERN_LABEL, type DemandService, type OperationPattern, type ValidationIssue } from '../types'
 import { fitToService } from './map'
@@ -327,6 +329,7 @@ function render(): void {
   <div class="actionbar">
     <span class="status ${statusClass(issues)}">${statusText(issues)}</span>
     <button type="button" data-act="validate" class="secondary">検証する</button>
+    <a data-act="preview" class="btn" href="check.html#preview" target="_blank" rel="noopener">住民ページで見る</a>
     <button type="button" data-act="download" class="primary">zip を出す</button>
   </div>
   `
@@ -494,6 +497,19 @@ function onClick(e: Event): void {
         return
       }
       downloadBytes(buildZip(files), `${s.routeId || 'gtfs-flex'}.zip`)
+      break
+    }
+    case 'preview': {
+      // 出力と同じ経路（書く → 読む）を通してから住民向けページへ渡す。
+      // zip と違い、エラーがあっても見られる（直す手がかりになるので止めない）。
+      // ボタンは <a target="_blank">。ここでデータを置いてから、リンクの標準動作で新しいタブが開く
+      const view = readFlexFiles(buildFlexFiles(s))
+      if (view.areas.length === 0 || !savePreview(view)) {
+        e.preventDefault()
+        setState({ issues: validateFlexFiles(buildFlexFiles(s)) })
+        panelRoot.querySelector('#sec-export')?.scrollIntoView({ block: 'start' })
+        return
+      }
       break
     }
   }

@@ -148,6 +148,10 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
 - **住民向け確認ページの試作（2026-09-26）**：`check.html` + `src/check.ts`。瑞穂町「チョイソコみずほまち」1件分。
   地図タップ → 近くの乗り場3件と徒歩目安、運行日・時間帯、予約電話（tel: リンク）、出典表示。
   データは `scripts/convert-sample.mjs` で `public/data/*.json` に変換して同梱
+- **プレビュー連携（2026-09-26）**：作成画面の「住民ページで見る」→ `check.html#preview`。
+  受け渡しは `src/preview.ts`（localStorage 経由・サーバ不要）。中身は flexWriter → flexReader を
+  通した FlexView なので、zip に入るものと同じ解釈で表示される。区域だけの形態（乗り場ゼロ）は
+  「乗れる範囲の中／外」の判定だけを出す。ボタンは `<a target="_blank">`（window.open はブロックされる環境がある）
 
 ### まだ無いもの（優先順・2026-09-26 更新）
 
@@ -160,12 +164,11 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
    ODPT のアクセスキーを画面側に書かない。複数データの切り替え UI もここで
 3. **zip のままの読み込み**：`flexReader` は「ファイル名 → テキスト」辞書までは読める。
    ブラウザで zip を展開する部分（zip.ts は書く専用）が未実装
-4. **作成画面から住民向け画面をプレビュー**：作ったデータを保存せずにそのまま住民向け画面で見られる
-5. **入力の保存**（localStorage で足りる）
-6. 正規バリデータでの確認：出力 zip を https://gtfs-validator.mobilitydata.org/ に投げ、Flex のルールがどこまで見られるか記録
-7. GTFS-JP 第2編 2.5〜2.8 との突合（GTFS-JP 固有ファイルの要否。route_type は実データでは 3 が標準と確認済み）
-8. 複数の区域・複数の予約ルール（今は各1つ）。実データはエリアごとに route / trip / location_group を 1:1:1 で作る（§12）
-9. 運休日・曜日振替（calendar_dates.txt。実データは15件全てが同梱、flexWriter は未出力。flexReader は読める）
+4. **入力の保存**（localStorage で足りる。プレビューの `src/preview.ts` と同じ要領）
+5. 正規バリデータでの確認：出力 zip を https://gtfs-validator.mobilitydata.org/ に投げ、Flex のルールがどこまで見られるか記録
+6. GTFS-JP 第2編 2.5〜2.8 との突合（GTFS-JP 固有ファイルの要否。route_type は実データでは 3 が標準と確認済み）
+7. 複数の区域・複数の予約ルール（今は各1つ）。実データはエリアごとに route / trip / location_group を 1:1:1 で作る（§12）
+8. 運休日・曜日振替（calendar_dates.txt。実データは15件全てが同梱、flexWriter は未出力。flexReader は読める）
 
 後回し（アプリ完成後に検討）：サーバ（固定URL・QR 発行、データ保存と引き継ぎ、ODPT 定期取り込み、住民の照会地点の集計）、LINE 窓口、印刷用チラシ
 

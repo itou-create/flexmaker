@@ -545,11 +545,28 @@ button.x:hover { color: var(--ng); background: var(--ng-soft); transform: none; 
 .actionbar .status { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); }
 .actionbar .status.ok { color: var(--ok); font-weight: 700; }
 .actionbar .status.ng { color: var(--ng); font-weight: 700; }
-.actionbar button { flex: none; }
+.actionbar button, .actionbar a.btn { flex: none; }
 .actionbar button.primary { padding-inline: 18px; }
+/* ボタンに見せるリンク（新しいタブで開きたい操作。window.open はブロックされる環境がある） */
+a.btn {
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  text-decoration: none;
+  text-align: center;
+  touch-action: manipulation;
+  transition: background 0.12s, border-color 0.12s, transform 0.08s;
+}
+a.btn:hover { background: var(--surface-2); border-color: var(--line-strong); transform: translateY(-1px); }
+a.btn:focus-visible { outline: 3px solid var(--green-soft); outline-offset: 1px; }
 @media (max-width: 380px) {
   .actionbar .status { display: none; }
-  .actionbar button { flex: 1; }
+  .actionbar button, .actionbar a.btn { flex: 1; }
 }
 
 /* ── オープニング画面 ─────────────────────── */
@@ -754,4 +771,14 @@ body.intro-open { overflow: hidden; }
   .check-head { grid-column: 1 / -1; }
   .check-map-wrap { grid-row: 2; }
   .check-panel { grid-row: 2; border-left: 1px solid var(--line); }
+}
+
+.check-preview-band {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  font-size: 14px;
+  font-weight: 700;
 }
