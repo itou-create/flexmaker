@@ -108,7 +108,9 @@ Flex で増えるのは4ファイル。他は通常の GTFS と同じ。
   - 第2編：https://www.mlit.go.jp/commmmons/document/007/commmmons_doc_007-02_ver01.pdf
   - 差分資料：https://www.mlit.go.jp/commmmons/document/007/commmmons_doc_007-03_ver01.pdf
 - **2025年12月末現在、Google 乗換案内は Flex 拡張を含むデータセットを受け付けない**（第1編の注記）。「Google マップに載る」とは言えない。消費側は OTP 等
-- **要確認**：`route_type` の推奨値（乗合タクシーを 3=バス にしてよいか）、GTFS-JP 固有ファイル（`agency_jp.txt`、`translations.txt` 等）の要否、第2編 2.5–2.8 の記入例との突合
+- `route_type`：ODPT の実データでは **3（バス）が事実上の標準**（14/15件。§12）。GTFS-JP 文書上の推奨値の確認は残っている
+- GTFS-JP 固有ファイル（`agency_jp.txt`、`translations.txt` 等）：ODPT の Flex 実データ15件は**どれも含んでいない**（§12）。文書上の要否確認は残っている
+- **要確認**：第2編 2.5–2.8 の記入例との突合
 
 ---
 
@@ -133,6 +135,9 @@ Flex で増えるのは4ファイル。他は通常の GTFS と同じ。
 ## 11. 実データ（ODPT、CC BY 4.0、15件・2026-09-18 時点）
 
 `npm run fetch-samples` で `samples/` に落とす（ネットワークが通る環境で実行）。
+**2026-09-26：ckan.odpt.org の CKAN API（/api/3/action/…）が JSON を返さなくなった**（どのパスでもカタログの HTML が返る）。
+fetch-samples はデータセットページ → リソースページとたどって `api-public.odpt.org` の直リンクを拾う方式に変更済み。
+各データセットには zip が2つある：1つ目が GTFS-Flex フィード本体、2つ目は**乗降実績データ**（`route_id,pickup_stop_id,drop_off_stop_id,pickup_date,…` の CSV。フィードではない）。
 
 | データセット ID | 自治体 | 提供 |
 |---|---|---|
@@ -153,3 +158,49 @@ Flex で増えるのは4ファイル。他は通常の GTFS と同じ。
 | mizuho_town_mizuho_area | 瑞穂町（東京） | 瑞穂町 |
 
 一覧：https://ckan.odpt.org/dataset/?tags=GTFS-Flex
+
+---
+
+## 12. 実データとの突合結果（2026-09-26、15フィード全件）
+
+flexWriter の出力（`buildFlexFiles`）と、上の15件の中身を突き合わせた。
+
+### 15件すべてに共通していたこと
+
+- **ファイル構成は全件同一**：`agency / booking_rules / calendar / calendar_dates / feed_info / location_groups / location_group_stops / routes / stops / stop_times / trips` の11ファイル。
+  **`locations.geojson`（区域）を使うフィードは1件も無い。** 全件が「決まった乗降場所の集まり＝location_group」方式
+- **stop_times は全件このツールの checkpoint 形と同じ組み方**：1便2行、
+  1行目 `pickup_type=2, drop_off_type=1`、2行目 `pickup_type=1, drop_off_type=2`、
+  両行とも同じ `location_group_id` と同じ窓（start/end_pickup_drop_off_window）。
+  → flexWriter の checkpoint 出力は実データと行構造が一致。zone 系3形態は実例が無い（仕様上は正しいが、消費側での実績は未知）
+- **booking_type は全件 1**（当日でも可・n分前まで）。type=2（前日まで）の実例は無し。
+  `prior_notice_duration_min` は 0〜60分、`prior_notice_start_day` は 0〜7日（受付開始）が相場
+- **feed_info は全件 `feed_start_date` / `feed_end_date` を記入** → flexWriter も calendar の期間を書くように直した（2026-09-26）
+- **calendar_dates.txt は全件が同梱**（中身は 0〜36行。運休日・曜日振替に使用）→ flexWriter は未出力。運休日入力を付けるときに対応（ロードマップに追記済み）
+
+### 多数派だが全件ではないこと
+
+- `route_type` は **14件が 3（バス）**、瑞穂町のみ 715（拡張 route_type：Demand and Response Bus）。
+  §7 の「要確認」への答え：**3 が ODPT の事実上の標準。このツールも 3 のままでよい**
+- 予約の連絡先：**電話番号・案内文・URL を booking_rules に書いているのは瑞穂町だけ**
+  （`message` に受付時間、`phone_number`、`info_url`。他14件は予約手段の情報が一切無い）。
+  → 電話番号を必ず書かせるこのツールの方針は、既存データの弱点を埋める差別化点
+- `pickup_booking_rule_id` / `drop_off_booking_rule_id`：14件は**両方の行に両方**書く（乗車不可の行にも pickup 側を書く）。
+  瑞穂町だけが flexWriter と同じ「乗車行に pickup 側・降車行に drop_off 側」。仕様上はどちらも通る。flexWriter は現状のまま
+- 複数エリアの表現：**エリアごとに route / trip / location_group を1つずつ**（1:1:1）作る（川越3・紀の川3・前橋3・坂井3・安中2）。
+  同じ stop が複数グループに属する例あり（紀の川・坂井）。ロードマップ「複数の区域」はこの形に合わせる
+- `trip_headsign` は瑞穂町以外ほぼ空。`stops.txt` は `stop_code` を書く事業者が多く、`location_type` は瑞穂町以外空
+
+### 実データ側の癖（読み込み機能を作るときの注意）
+
+- 時刻の桁：未来シェア2件は `8:30:00` のように**時が1桁**。読む側は `H:mm:ss` も受ける
+- 福智町の `prior_notice_start_day=10080` は分の値を日の欄に書いたと思われる（10080分=7日）。実データにも誤りはある
+- 規模感：stops は 35〜872件、trip は 1〜3件。1フィード＝1サービス（zip 全体が小さい）
+
+### flexWriter に入れた変更（2026-09-26）
+
+1. `feed_info.txt` に `feed_start_date` / `feed_end_date` を追加（calendar と同じ期間）
+
+変更しないと判断したこと：stop_times の空列（`stop_id` / `location_id` を空で出す）はそのまま
+（実データは使う列しか書かないが、固定ヘッダの方がコードが単純で仕様上も問題ない）。
+booking_rule の参照の書き方も現状のまま（上記のとおり瑞穂町方式）。

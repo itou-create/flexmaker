@@ -253,14 +253,18 @@ export function buildFlexFiles(s: DemandService, now = new Date()): GtfsFiles {
   files['trips.txt'] = toCsv(['route_id', 'service_id', 'trip_id', 'trip_headsign'], trips)
   files['stop_times.txt'] = toCsv(STOP_TIMES_COLUMNS, stopTimes)
 
+  // feed_start_date / feed_end_date は ODPT の実データ15件が全て記入していた（2026-09-26 突合）。
+  // 有効期間は calendar と同じにする
   const ymd = now.toISOString().slice(0, 10).replace(/-/g, '')
   files['feed_info.txt'] = toCsv(
-    ['feed_publisher_name', 'feed_publisher_url', 'feed_lang', 'feed_version'],
+    ['feed_publisher_name', 'feed_publisher_url', 'feed_lang', 'feed_start_date', 'feed_end_date', 'feed_version'],
     [
       {
         feed_publisher_name: s.feedPublisherName,
         feed_publisher_url: s.feedPublisherUrl,
         feed_lang: 'ja',
+        feed_start_date: c.startDate,
+        feed_end_date: c.endDate,
         feed_version: ymd,
       },
     ],

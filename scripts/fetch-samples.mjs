@@ -1,5 +1,10 @@
 // ODPT の GTFS-Flex データセット（CC BY 4.0）を samples/ にダウンロードする。
 // 使い方: npm run fetch-samples
+//
+// 2026-09-26 変更：ckan.odpt.org の CKAN API（/api/3/action/…）が JSON を返さなくなった
+// （どのパスでもカタログの HTML が返る）。データセットページ → リソースページとたどり、
+// api-public.odpt.org の直リンクを拾う方式に変更。
+//
 // ネットワーク制限のある環境（社内プロキシ等）では動かないことがある。その場合はブラウザで
 // https://ckan.odpt.org/dataset/?tags=GTFS-Flex から手で落として samples/ に置く。
 
@@ -27,22 +32,41 @@ const IDS = [
 const out = join(process.cwd(), 'samples')
 await mkdir(out, { recursive: true })
 
+async function fetchText(url) {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`HTTP ${res.status} (${url})`)
+  return res.text()
+}
+
 for (const id of IDS) {
   try {
-    const res = await fetch(`https://ckan.odpt.org/api/3/action/package_show?id=${id}`)
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const pkg = (await res.json()).result
-    const zips = pkg.resources.filter((r) => /zip/i.test(r.format) || /\.zip($|\?)/i.test(r.url))
-    if (zips.length === 0) {
-      console.warn(`[skip] ${id}: zip リソースが見つからない（resources: ${pkg.resources.map((r) => r.format).join(', ')}）`)
+    const page = await fetchText(`https://ckan.odpt.org/dataset/${id}`)
+    const resourcePaths = [...page.matchAll(new RegExp(`href="(/dataset/${id}/resource/[0-9a-f-]+)"`, 'g'))]
+      .map((m) => m[1])
+    const unique = [...new Set(resourcePaths)]
+    if (unique.length === 0) {
+      console.warn(`[skip] ${id}: リソースページへのリンクが見つからない`)
       continue
     }
-    for (const r of zips) {
-      const bin = await fetch(r.url)
-      if (!bin.ok) throw new Error(`HTTP ${bin.status} (${r.url})`)
-      const name = zips.length === 1 ? `${id}.zip` : `${id}__${r.name.replace(/[^\w.-]+/g, '_')}.zip`
+    const urls = new Set()
+    for (const path of unique) {
+      const rpage = await fetchText(`https://ckan.odpt.org${path}`)
+      // 認証不要の api-public 直リンクだけ拾う（acl:consumerKey 付きの api.odpt.org は使わない）
+      for (const m of rpage.matchAll(/href="(https:\/\/api-public\.odpt\.org\/[^"]+\.zip[^"]*)"/g)) {
+        urls.add(m[1].replaceAll('&amp;', '&'))
+      }
+    }
+    if (urls.size === 0) {
+      console.warn(`[skip] ${id}: api-public の zip リンクが見つからない`)
+      continue
+    }
+    let i = 0
+    for (const url of urls) {
+      const bin = await fetch(url)
+      if (!bin.ok) throw new Error(`HTTP ${bin.status} (${url})`)
+      const name = urls.size === 1 ? `${id}.zip` : `${id}__${++i}.zip`
       await writeFile(join(out, name), Buffer.from(await bin.arrayBuffer()))
-      console.log(`[ok] ${name}  (${pkg.title} / ${pkg.license_title ?? 'license?'})`)
+      console.log(`[ok] ${name}`)
     }
   } catch (e) {
     console.error(`[fail] ${id}: ${e.message}`)
