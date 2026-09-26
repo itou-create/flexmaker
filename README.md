@@ -39,6 +39,17 @@ npm run build      # dist/ に静的ファイル
 出力前に Flex 固有の条件付き必須／禁止ルールを検査し、エラーがあれば出しません。
 **ただしこれは簡易検査です。本番データは MobilityData の正規バリデータ（https://gtfs-validator.mobilitydata.org/）にもかけてください。**
 
+## 住民向け確認ページ「うちから乗れる？」（試作）
+
+作成画面とは別の入口 `check.html` に、住民向けの確認ページがあります。
+地図で自宅など「乗りたい場所」を押すと、近くの乗り場・徒歩の目安・運行日・予約の電話番号が分かります。
+
+- 公開先：https://itou-create.github.io/flexmaker/check.html
+- いまは瑞穂町「チョイソコみずほまち」の1件だけ（形の確認用）。データは
+  公共交通オープンデータセンターの公開データ（CC BY 4.0）をデモ用に変換して同梱しています。
+  出典はページ内に表示。**公式の案内ではありません**
+- 変換：`node scripts/convert-sample.mjs <展開したフォルダ> <データセットID>` → `public/data/*.json`
+
 ## 実データを手元に置く
 
 ```bash
@@ -53,8 +64,10 @@ src/gtfs/flexWriter.ts  入力モデル → GTFS-Flex ファイル群   ← 核�
 src/gtfs/validate.ts    Flex 固有ルールの検査
 src/gtfs/zip.ts         無圧縮 zip ライタ（依存なし）
 src/gtfs/csv.ts         CSV 読み書き
+src/gtfs/flexReader.ts  既存 GTFS-Flex → 表示モデル（住民向けページで使用）
 src/ui/map.ts           地図（Leaflet + 地理院タイル）
 src/ui/panel.ts         入力パネル
+src/check.ts            住民向け確認ページ（check.html の本体）
 docs/gtfs-flex-reference.md   仕様の早見表・要確認事項・先行ツール・実データ一覧
 scripts/fetch-samples.mjs     実データのダウンロード
 CLAUDE.md               設計原則と次にやること
@@ -62,5 +75,6 @@ CLAUDE.md               設計原則と次にやること
 
 ## 状態
 
-まだ **GTFS-JP 第4.0版との突合と、実データとの比較が済んでいません**。
-出力の構成は GTFS 本体仕様（gtfs.org）の条件から組んだもので、流通データと違う部分があれば直します。
+- 実データとの比較は済みました（2026-09-26、ODPT の15フィード全件。`docs/gtfs-flex-reference.md` §12）。
+  決まった乗降場所方式の出力は流通データと同じ構成です
+- まだ **GTFS-JP 第4.0版の記入例との突合が済んでいません**。「GTFS-JP 準拠」はまだ名乗れません

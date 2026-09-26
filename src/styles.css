@@ -655,3 +655,103 @@ body.intro-open { overflow: hidden; }
 @media (max-height: 640px) {
   .intro { place-items: start center; }
 }
+
+/* ── 住民向け確認ページ（check.html）───────────────
+   高齢の方が読める文字の大きさと言葉で。作成画面より一回り大きく。 */
+
+.check-layout {
+  display: grid;
+  height: 100%;
+  grid-template-rows: auto 44vh 1fr;
+  font-size: 17px;
+}
+.check-head {
+  padding: 10px 16px 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.check-title { font-size: 21px; font-weight: 700; color: var(--green-deep); line-height: 1.3; }
+.check-sub { font-size: 14px; color: var(--ink-2); }
+
+.check-map-wrap { position: relative; min-height: 0; }
+.check-map-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 500;
+  width: max-content;
+  max-width: calc(100% - 28px);
+  padding: 9px 16px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  font-size: 14.5px;
+  pointer-events: none;
+}
+
+.check-panel {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 14px 28px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.check-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+}
+.check-card h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: var(--green-deep);
+}
+.check-card p { margin: 6px 0; }
+.check-big { font-size: 18px; line-height: 1.7; }
+.check-small { font-size: 13px; color: var(--muted); }
+.check-yes { font-size: 18px; color: var(--ok); }
+.check-no { font-size: 17px; color: var(--warn); }
+
+.check-near { margin: 8px 0 4px; padding: 0 0 0 26px; }
+.check-near li { margin: 8px 0; font-size: 18px; }
+.check-near .check-walk { display: block; font-size: 14.5px; color: var(--ink-2); }
+
+.check-call {
+  display: block;
+  margin: 10px 0 4px;
+  padding: 15px 18px;
+  background: var(--green);
+  color: #fff;
+  border-radius: var(--radius);
+  text-align: center;
+  text-decoration: none;
+  font-size: 19px;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+.check-call:active { background: var(--green-deep); }
+.check-call span { display: block; font-size: 22px; letter-spacing: 0.04em; }
+.check-card a { color: var(--green-deep); font-weight: 700; }
+
+.check-foot {
+  padding: 4px 6px 10px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.check-foot p { margin: 6px 0; }
+.check-foot a { color: var(--ink-2); }
+
+@media (min-width: 900px) {
+  .check-layout {
+    grid-template-rows: auto 1fr;
+    grid-template-columns: 1fr 400px;
+  }
+  .check-head { grid-column: 1 / -1; }
+  .check-map-wrap { grid-row: 2; }
+  .check-panel { grid-row: 2; border-left: 1px solid var(--line); }
+}
