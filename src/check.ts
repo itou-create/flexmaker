@@ -26,6 +26,9 @@ interface DemoData {
 
 const DAY_NAMES = ['月', '火', '水', '木', '金', '土', '日']
 
+/** いちばん近い乗り場がこれより遠ければ「エリアの外」と伝える（徒歩約25分） */
+const FAR_M = 2000
+
 function daysText(days: readonly boolean[]): string {
   if (days.every(Boolean)) return '毎日'
   if (days.slice(0, 5).every(Boolean) && !days[5] && !days[6]) return '月曜日から金曜日'
@@ -150,7 +153,7 @@ function renderMap(): void {
     })
       .bindTooltip('乗りたい場所', { permanent: true, direction: 'top', offset: [0, -10], className: 'stop-label' })
       .addTo(map)
-    for (const { stop } of nearestStops(picked.lat, picked.lon, area.board.stops, 3)) {
+    for (const { stop } of nearestStops(picked.lat, picked.lon, area.board.stops, 3).filter(({ m }) => m <= FAR_M)) {
       nearLines.push(
         L.polyline(
           [
@@ -180,6 +183,18 @@ function pickedCard(): string {
       : `<p class="check-no">この場所は、乗れる範囲の<b>外</b>のようです。下の乗り場までお越しください。</p>`
   }
   const near = nearestStops(picked.lat, picked.lon, area.board.stops, 3)
+
+  // いちばん近い乗り場まで歩けない距離なら、徒歩何分とは言わずに「エリアの外」と伝える
+  if (near.length > 0 && near[0].m > FAR_M) {
+    const km = near[0].m >= 9500 ? String(Math.round(near[0].m / 1000)) : (near[0].m / 1000).toFixed(1)
+    return `<section class="check-card">
+      <h2>近くの乗り場</h2>
+      <p class="check-no check-big">この場所は、このサービスが走っている<b>エリアの外</b>のようです。</p>
+      <p>いちばん近い乗り場は <b>${esc(near[0].stop.name)}</b>（約${km}km 先）です。</p>
+      <p class="check-small">別の場所を調べるときは、もう一度地図を押してください。</p>
+    </section>`
+  }
+
   const items = near
     .map(({ stop, m }) => {
       const min = Math.max(1, Math.ceil(m / 80))
