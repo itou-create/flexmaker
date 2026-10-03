@@ -9,14 +9,16 @@
 //   - エリア内の移動 300円、エリア間 400〜800円。エリアごとの時刻表制（時刻は目安）
 //
 // モデル化の判断（公式データではない。このツールの試作）：
-//   - エリア＝ 滝根 / 大越 / 都路・常葉 / 船引町内 の4つ（zone_only）。
+//   - エリア＝ 滝根 / 大越 / 都路 / 常葉 / 船引 の5つ（zone_only）。旧5町村にそのまま対応。
+//     時刻表は都路・常葉が共通だが、料金が「町内300円・都路⇔常葉500円」なので町ごとに分ける。
 //     船引の北部線・まちなか線・南部線は「船引町内」1区域に近似
 //   - エリア間の便（滝根→船引まちなか等）は「区域→別の区域」で、今の4形態に無いため未収録
 //   - 祝日・年末年始は closedDates で運休に。祝日は2026年度のもの（公開前に内閣府の一覧と要突合）
 //   - 都路・常葉の朝6:30〜7:30便だけ前日16:30締切（便ごとの予約ルール上書き）
-//   - 区域ポリゴンはどれもおおよその範囲。正確な行政界ではない
+//   - 区域ポリゴンは旧町村界（tamura-zones.ts。歴史的行政区域データセットβ版・CC BY-SA 4.0 を間引いたもの）
 
 import type { BookingRule, Calendar, DemandService } from '../types.ts'
+import { TAMURA_ZONES } from './tamura-zones.ts'
 
 // 2026年度（2026-04-01〜2027-03-31）の運休日：祝日（日曜と重なる日は除く）＋年末年始
 const CLOSED_DATES = [
@@ -81,14 +83,7 @@ export function tamuraService(): DemandService {
         routeId: 'tamura_rakuraku_takine',
         routeName: '田村らくらくタクシー（滝根エリア）',
         pattern: 'zone_only',
-        zone: {
-          id: 'zone',
-          name: '滝根町内（おおよその範囲）',
-          polygon: [
-            [140.625, 37.33], [140.635, 37.365], [140.675, 37.375], [140.715, 37.355],
-            [140.735, 37.32], [140.715, 37.285], [140.675, 37.27], [140.64, 37.29],
-          ],
-        },
+        zone: { id: 'zone', name: '滝根町内（旧滝根町の区域）', polygon: TAMURA_ZONES.takine },
         stops: [],
         bookingRule: booking(),
         calendar: calendar('takine_cal'),
@@ -98,35 +93,34 @@ export function tamuraService(): DemandService {
         routeId: 'tamura_rakuraku_ogoe',
         routeName: '田村らくらくタクシー（大越エリア）',
         pattern: 'zone_only',
-        zone: {
-          id: 'zone',
-          name: '大越町内（おおよその範囲）',
-          polygon: [
-            [140.555, 37.37], [140.6, 37.405], [140.645, 37.395], [140.655, 37.355],
-            [140.625, 37.325], [140.575, 37.33],
-          ],
-        },
+        zone: { id: 'zone', name: '大越町内（旧大越町の区域）', polygon: TAMURA_ZONES.ogoe },
         stops: [],
         bookingRule: booking(),
         calendar: calendar('ogoe_cal'),
         windows: [{ start: '07:30', end: '18:00' }],
       },
       {
-        routeId: 'tamura_rakuraku_miyakoji_tokiwa',
-        routeName: '田村らくらくタクシー（都路・常葉エリア）',
+        routeId: 'tamura_rakuraku_miyakoji',
+        routeName: '田村らくらくタクシー（都路エリア）',
         pattern: 'zone_only',
-        zone: {
-          id: 'zone',
-          name: '都路町・常葉町内（おおよその範囲）',
-          polygon: [
-            [140.6, 37.44], [140.65, 37.49], [140.72, 37.48], [140.8, 37.44],
-            [140.79, 37.38], [140.72, 37.36], [140.65, 37.4], [140.61, 37.4],
-          ],
-        },
+        zone: { id: 'zone', name: '都路町内（旧都路村の区域）', polygon: TAMURA_ZONES.miyakoji },
         stops: [],
         bookingRule: booking(),
         calendar: calendar('miyakoji_cal'),
         // 朝6:30〜7:30発だけ前日16:30締切（利用ガイドの例外規定）
+        windows: [
+          { start: '06:30', end: '07:30', booking: earlyMorning },
+          { start: '07:30', end: '18:30' },
+        ],
+      },
+      {
+        routeId: 'tamura_rakuraku_tokiwa',
+        routeName: '田村らくらくタクシー（常葉エリア）',
+        pattern: 'zone_only',
+        zone: { id: 'zone', name: '常葉町内（旧常葉町の区域）', polygon: TAMURA_ZONES.tokiwa },
+        stops: [],
+        bookingRule: booking(),
+        calendar: calendar('tokiwa_cal'),
         windows: [
           { start: '06:30', end: '07:30', booking: earlyMorning },
           { start: '07:30', end: '18:30' },
@@ -138,11 +132,8 @@ export function tamuraService(): DemandService {
         pattern: 'zone_only',
         zone: {
           id: 'zone',
-          name: '船引町内（おおよその範囲。北部線・まちなか線・南部線をまとめて近似）',
-          polygon: [
-            [140.48, 37.44], [140.52, 37.5], [140.59, 37.49], [140.615, 37.44],
-            [140.6, 37.4], [140.54, 37.38], [140.49, 37.4],
-          ],
+          name: '船引町内（旧船引町の区域。北部線・まちなか線・南部線をまとめて近似）',
+          polygon: TAMURA_ZONES.funehiki,
         },
         stops: [],
         bookingRule: booking(),
