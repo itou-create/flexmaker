@@ -6,18 +6,21 @@
 // zip に入るのと同じ経路を通すので、プレビューで見えるものと出力されるデータが食い違わない。
 
 import type { FlexView } from './gtfs/flexReader.ts'
+import type { NoticeItem } from './types'
 
 const PREVIEW_KEY = 'flexmaker:preview'
 
 export interface PreviewPayload {
   savedAt: string
   view: FlexView
+  /** お知らせ（GTFS 外の持ち回り。住民ページ・サイネージが表示する） */
+  notices?: NoticeItem[]
 }
 
 /** プレビュー用データを置く。プライベートモード等で localStorage が使えなければ false */
-export function savePreview(view: FlexView): boolean {
+export function savePreview(view: FlexView, notices?: NoticeItem[]): boolean {
   try {
-    const payload: PreviewPayload = { savedAt: new Date().toISOString(), view }
+    const payload: PreviewPayload = { savedAt: new Date().toISOString(), view, notices }
     localStorage.setItem(PREVIEW_KEY, JSON.stringify(payload))
     return true
   } catch {

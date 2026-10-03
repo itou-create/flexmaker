@@ -685,7 +685,7 @@ function onClick(e: Event): void {
       // zip と違い、エラーがあっても見られる（直す手がかりになるので止めない）。
       // ボタンは <a target="_blank">。ここでデータを置いてから、リンクの標準動作で新しいタブが開く
       const view = readFlexFiles(buildFlexFiles(sv))
-      if (view.areas.length === 0 || !savePreview(view)) {
+      if (view.areas.length === 0 || !savePreview(view, sv.notices)) {
         e.preventDefault()
         setState({ issues: validateFlexFiles(buildFlexFiles(sv)) })
         panelRoot.querySelector('#sec-export')?.scrollIntoView({ block: 'start' })

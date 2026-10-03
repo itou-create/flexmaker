@@ -15,6 +15,7 @@ import { loadPreview } from './preview'
 import { areaColor } from './areaColors'
 import { bookingText, daysText, windowsText } from './viewText'
 import { bookingNow } from './bookingNow'
+import type { NoticeItem } from './types'
 
 interface DemoSource {
   municipality: string
@@ -29,6 +30,7 @@ interface DemoData {
   /** 同梱データのときだけある。無ければプレビュー表示 */
   source?: DemoSource
   view: FlexView
+  notices?: NoticeItem[]
 }
 
 /** いちばん近い乗り場がこれより遠ければ「エリアの外」と伝える（徒歩約25分） */
@@ -280,8 +282,18 @@ function renderPanel(): void {
     <p class="check-small">${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')} 時点の目安です。確かなことは電話でご確認ください。</p>
   </section>`
 
+  // お知らせ（広報）。新しいものから最大2件
+  const noticeBands = (data.notices ?? [])
+    .slice(0, 2)
+    .map(
+      (n) =>
+        `<div class="check-notice">🔔 <b>${esc(n.date.slice(5).replace('-', '/'))}</b> ${esc(n.text)}</div>`,
+    )
+    .join('')
+
   panel.innerHTML = `
     ${s ? '' : '<div class="check-preview-band">プレビュー — 作成中のデータを表示しています</div>'}
+    ${noticeBands}
     ${areaChips}
     ${nowCard}
     ${pickedCard()}
@@ -312,7 +324,7 @@ async function main(): Promise<void> {
       </section>`
       return
     }
-    data = { view: normalizeView(p.view) }
+    data = { view: normalizeView(p.view), notices: p.notices }
     area = data.view.areas[0]
     const name = area.name || '作成中のサービス'
     sub.textContent = `${p.view.agencyName ? p.view.agencyName + ' ' : ''}「${name}」のプレビュー`

@@ -107,12 +107,24 @@ export interface DemandArea {
   windows: ServiceWindow[]
 }
 
+/**
+ * 住民向けのお知らせ（広報）。GTFS には対応する項目が無いので zip には入らない。
+ * 今は端末内（draft）→ プレビュー経由で住民ページ・サイネージに出す。
+ * 公開サイトへの配信はサーバ導入の判断後（CLAUDE.md の構想）。
+ */
+export interface NoticeItem {
+  /** YYYY-MM-DD */
+  date: string
+  text: string
+}
+
 /** 画面で扱う1サービス分の入力。事業者1つ＋エリア1つ以上。これが揃えば zip が出せる */
 export interface DemandService {
   agency: Agency
   areas: DemandArea[]
   feedPublisherName: string
   feedPublisherUrl: string
+  notices?: NoticeItem[]
 }
 
 /** 出力：ファイル名 → 中身（テキスト）。zip 化は src/gtfs/zip.ts */

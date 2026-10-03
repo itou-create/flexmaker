@@ -7,7 +7,8 @@
 //     ダミーで構想を見せる（CLAUDE.md の構想。導入判断はまだ）
 
 import './styles.css'
-import { clearDraft, loadDraft } from './draft'
+import { clearDraft, loadDraft, saveDraft } from './draft'
+import type { NoticeItem } from './types'
 import { buildFlexFiles } from './gtfs/flexWriter'
 import { validateFlexFiles } from './gtfs/validate'
 import { readFlexFiles } from './gtfs/flexReader.ts'
@@ -115,14 +116,28 @@ function render(): void {
       <p class="check-small">「区域外からどこが多く調べられたか」は、区域を広げる検討の材料になります（地点は集計だけ・個人は特定しない方針）。</p>
     </section>
 
-    <section class="mp-card mp-mock">
-      <h2>お知らせ（広報）<span class="mock-tag">サンプル</span></h2>
-      <p>住民ページとサイネージに出す短いお知らせを、ここから更新する構想です。</p>
-      <ul class="mp-notices">
-        <li><span class="mp-date">12/20</span>年末年始（12/29〜1/3）は運休します</li>
-        <li><span class="mp-date">11/01</span>新しい乗降場所「いきいきセンター前」が増えました</li>
-      </ul>
-      <div class="mp-actions"><button type="button" class="secondary" data-act="mock">お知らせを書く</button></div>
+    <section class="mp-card">
+      <h2>お知らせ（広報）</h2>
+      <p>住民ページとサイネージの上部に出す短いお知らせです。いまは「住民ページで見る」「サイネージ表示」を
+      開いたときに反映されます（公開サイトへの常時配信はサーバ検討後）。</p>
+      ${
+        sv
+          ? `<ul class="mp-notices">
+              ${
+                (sv.notices ?? [])
+                  .map(
+                    (n, i) =>
+                      `<li><span class="mp-date">${esc(n.date.slice(5).replace('-', '/'))}</span>${esc(n.text)}<button type="button" class="x" data-act="notice-del" data-i="${i}" aria-label="このお知らせを削除">×</button></li>`,
+                  )
+                  .join('') || '<li class="mp-empty">まだお知らせはありません</li>'
+              }
+            </ul>
+            <div class="mp-actions">
+              <input id="notice-text" class="mp-key-input" placeholder="例：年末年始（12/29〜1/3）は運休します" maxlength="60">
+              <button type="button" class="secondary" data-act="notice-add">追加</button>
+            </div>`
+          : '<p class="check-small">作成データができると、ここでお知らせを書けます。</p>'
+      }
     </section>
 
     <footer class="mp-foot">
@@ -144,7 +159,7 @@ app.addEventListener('click', (e) => {
         return
       }
       const view = readFlexFiles(buildFlexFiles(draft.service))
-      if (view.areas.length === 0 || !savePreview(view)) {
+      if (view.areas.length === 0 || !savePreview(view, draft.service.notices)) {
         e.preventDefault()
         window.alert('まだ表示できる内容がありません。作成画面でエリアの入力を進めてください。')
       }
@@ -165,6 +180,25 @@ app.addEventListener('click', (e) => {
     case 'reset': {
       if (!window.confirm('入力をすべて消して白紙に戻しますか？')) return
       clearDraft()
+      render()
+      break
+    }
+    case 'notice-add': {
+      if (!draft) return
+      const input = document.getElementById('notice-text') as HTMLInputElement | null
+      const text = input?.value.trim() ?? ''
+      if (!text) return
+      const notice: NoticeItem = { date: new Date().toISOString().slice(0, 10), text }
+      draft.service.notices = [notice, ...(draft.service.notices ?? [])].slice(0, 10)
+      saveDraft(draft.service, draft.activeArea)
+      render()
+      break
+    }
+    case 'notice-del': {
+      if (!draft) return
+      const i = Number(btn.dataset.i)
+      draft.service.notices = (draft.service.notices ?? []).filter((_, j) => j !== i)
+      saveDraft(draft.service, draft.activeArea)
       render()
       break
     }

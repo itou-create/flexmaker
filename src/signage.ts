@@ -11,10 +11,12 @@ import { loadPreview } from './preview'
 import { areaColor } from './areaColors'
 import { bookingNow } from './bookingNow'
 import { daysText, windowsText } from './viewText'
+import type { NoticeItem } from './types'
 
 interface DemoData {
   source?: { municipality: string; serviceName: string; provider: string }
   view: FlexView
+  notices?: NoticeItem[]
 }
 
 function esc(s: string): string {
@@ -52,6 +54,7 @@ function render(): void {
         <div class="sg-phone"><span>予約のお電話</span><strong>${esc(phone)}</strong></div>
       </div>
     </div>
+    ${data.notices?.[0] ? `<div class="sg-notice">🔔 ${esc(data.notices[0].text)}</div>` : ''}
     <footer class="sg-foot">
       <div class="sg-dots">${areas.map((_, j) => `<span class="${j === i ? 'on' : ''}"></span>`).join('')}</div>
       <div class="sg-note">スマホでも調べられます：itou-create.github.io/flexmaker/check.html ／ この表示は目安です</div>
@@ -71,7 +74,7 @@ async function main(): Promise<void> {
       app.innerHTML = '<div class="sg"><p style="padding:40px">表示するデータが見つかりません。作成画面かマイページから開き直してください。</p></div>'
       return
     }
-    data = { view: normalizeView(p.view) }
+    data = { view: normalizeView(p.view), notices: p.notices }
   } else {
     const res = await fetch('./data/mizuho_town_mizuho_area.json')
     if (!res.ok) {

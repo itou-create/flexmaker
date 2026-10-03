@@ -1104,3 +1104,24 @@ a.link-a:hover { background: var(--green-tint); }
   height: 100%;
   object-fit: cover;
 }
+
+.check-notice {
+  background: var(--stop-soft);
+  color: var(--ink);
+  border: 1px solid var(--stop);
+  border-radius: var(--radius);
+  padding: 9px 14px;
+  font-size: 15px;
+}
+.check-notice b { color: var(--stop); margin-right: 4px; }
+.sg-notice {
+  margin-top: 2vmin;
+  background: var(--stop-soft);
+  border: 0.4vmin solid var(--stop);
+  border-radius: 16px;
+  padding: 1.6vmin 3vmin;
+  font-size: 3.4vmin;
+  font-weight: 700;
+}
+.mp-empty { color: var(--muted); font-size: 13px; }
+.mp-notices .x { border: none; background: none; padding: 0 6px; font-size: 16px; color: var(--muted); cursor: pointer; float: right; }
