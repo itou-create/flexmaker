@@ -4,7 +4,7 @@
 
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { getState, setState, subscribe, updateService } from '../state'
+import { activeArea, getState, setState, subscribe, updateArea } from '../state'
 import type { Stop } from '../types'
 
 let map: L.Map
@@ -23,14 +23,15 @@ export function mountMap(el: HTMLElement): void {
 
   map.on('click', (e: L.LeafletMouseEvent) => {
     const s = getState()
+    const a = activeArea()
     if (s.mapMode === 'zone') {
       setState({ draftPolygon: [...s.draftPolygon, [e.latlng.lng, e.latlng.lat]] })
     } else if (s.mapMode === 'stop') {
       const name = window.prompt('この場所の名前（例：町立病院）')
       if (!name) return
-      const id = `stop_${String(s.service.stops.length + 1).padStart(3, '0')}`
+      const id = `stop_${String(a.stops.length + 1).padStart(3, '0')}`
       const stop: Stop = { id, name, lat: round(e.latlng.lat), lon: round(e.latlng.lng) }
-      updateService({ stops: [...s.service.stops, stop] })
+      updateArea({ stops: [...a.stops, stop] })
     }
   })
 
@@ -43,26 +44,27 @@ function round(n: number): number {
 }
 
 export function fitToService(): void {
-  const s = getState().service
+  const a = activeArea()
   const pts: L.LatLngExpression[] = []
-  if (s.zone) for (const [lng, lat] of s.zone.polygon) pts.push([lat, lng])
-  for (const st of s.stops) pts.push([st.lat, st.lon])
+  if (a.zone) for (const [lng, lat] of a.zone.polygon) pts.push([lat, lng])
+  for (const st of a.stops) pts.push([st.lat, st.lon])
   if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [24, 24] })
   else if (pts.length === 1) map.setView(pts[0], 14)
 }
 
 function render(): void {
   const s = getState()
+  const a = activeArea()
 
-  // 確定した区域
+  // 確定した区域（編集中のエリアのもの）
   if (zoneLayer) zoneLayer.remove()
   zoneLayer = null
-  if (s.service.zone && s.service.zone.polygon.length >= 3) {
+  if (a.zone && a.zone.polygon.length >= 3) {
     zoneLayer = L.polygon(
-      s.service.zone.polygon.map(([lng, lat]) => [lat, lng] as L.LatLngExpression),
+      a.zone.polygon.map(([lng, lat]) => [lat, lng] as L.LatLngExpression),
       { color: '#34a06a', weight: 3, fillOpacity: 0.16 },
     ).addTo(map)
-    zoneLayer.bindTooltip(s.service.zone.name, { permanent: false })
+    zoneLayer.bindTooltip(a.zone.name, { permanent: false })
   }
 
   // 描画途中の区域
@@ -78,9 +80,9 @@ function render(): void {
     )
   }
 
-  // 乗降場所
+  // 乗降場所（編集中のエリアのもの）
   stopLayer.clearLayers()
-  for (const st of s.service.stops) {
+  for (const st of a.stops) {
     L.circleMarker([st.lat, st.lon], { radius: 8, color: '#4a80e0', weight: 3, fillColor: '#fff', fillOpacity: 1 })
       .bindTooltip(st.name, { permanent: true, direction: 'top', offset: [0, -8], className: 'stop-label' })
       .addTo(stopLayer)

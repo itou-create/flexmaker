@@ -235,9 +235,14 @@ function renderPanel(): void {
   const closedNote = area.closedDates.length > 0 ? '（年末年始などお休みの日があります）' : ''
 
   const phone = b?.phone ?? data.view.agencyPhone
+  // 一部の便だけ違う締切（朝の便は前日まで等）は、代表ルールの下に補足として出す
+  const extraNotes = area.otherBookings
+    .map((x) => (x.message ? `<p class="check-small">※ ${esc(x.message)}</p>` : ''))
+    .join('')
   const bookingLines = [
     b?.message ? `<p>${esc(b.message)}</p>` : '',
     `<p class="check-big">${esc(bookingText(area))}</p>`,
+    extraNotes,
     phone
       ? `<a class="check-call" href="tel:${esc(phone.replace(/[^\d+-]/g, ''))}">📞 電話で予約する<span>${esc(phone)}</span></a>`
       : '',
@@ -254,8 +259,20 @@ function renderPanel(): void {
       <p>これは作成画面で入力中のデータのプレビューです。保存も公開もされていません。内容を直すときは、作成画面のタブに戻ってください。</p>
     </footer>`
 
+  // エリア（路線）が複数あるときは、見るエリアを切り替えられるようにする
+  const areaChips =
+    data.view.areas.length > 1
+      ? `<div class="check-areas">${data.view.areas
+          .map(
+            (x, i) =>
+              `<button type="button" class="check-area-chip ${x === area ? 'active' : ''}" data-area="${i}">${esc(x.name || `エリア${i + 1}`)}</button>`,
+          )
+          .join('')}</div>`
+      : ''
+
   panel.innerHTML = `
     ${s ? '' : '<div class="check-preview-band">プレビュー — 作成中のデータを表示しています</div>'}
+    ${areaChips}
     ${pickedCard()}
     <section class="check-card">
       <h2>いつ走っている？</h2>
@@ -302,16 +319,19 @@ async function main(): Promise<void> {
   renderMap()
   renderPanel()
 
+  // エリア切り替え（エリアが複数あるときだけチップが出る）
+  panel.addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-area]')
+    if (!btn) return
+    area = data.view.areas[Number(btn.dataset.area)]
+    renderMap()
+    renderPanel()
+    fitArea()
+  })
+
   // CSS の適用が一瞬遅れて、この時点でも地図のコンテナが 0px のことがある
   // （そのまま fitBounds すると最大ズームに飛ぶ）。サイズが付いてから一度だけ全体に寄せる。
   // ResizeObserver は画面回転やパネルの伸縮でも invalidateSize してくれる
-  const fitArea = (): void => {
-    const pts: L.LatLngExpression[] = [...area.board.stops, ...area.alight.stops].map((st) => [st.lat, st.lon])
-    for (const z of [...area.board.zones, ...area.alight.zones])
-      for (const ring of z.rings) for (const [lng, lat] of ring) pts.push([lat, lng])
-    if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [20, 20], animate: false })
-    else map.setView([35.77, 139.35], 13, { animate: false })
-  }
   let fitted = false
   const tryFit = (): void => {
     map.invalidateSize()
@@ -322,6 +342,15 @@ async function main(): Promise<void> {
   }
   new ResizeObserver(tryFit).observe(document.getElementById('map')!)
   tryFit()
+}
+
+/** 編集中のエリアの乗り場と区域の全体が入るように寄せる */
+function fitArea(): void {
+  const pts: L.LatLngExpression[] = [...area.board.stops, ...area.alight.stops].map((st) => [st.lat, st.lon])
+  for (const z of [...area.board.zones, ...area.alight.zones])
+    for (const ring of z.rings) for (const [lng, lat] of ring) pts.push([lat, lng])
+  if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [20, 20], animate: false })
+  else map.setView([35.77, 139.35], 13, { animate: false })
 }
 
 void main()

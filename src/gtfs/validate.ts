@@ -33,7 +33,11 @@ export function validateFlexFiles(files: GtfsFiles): ValidationIssue[] {
   }
 
   // --- ID の一意性（stops.stop_id / locations.geojson id / location_group_id は全体で一意） ---
-  const stopIds = new Set(table('stops.txt').map((r) => r.stop_id))
+  const stopIds = new Set<string>()
+  for (const r of table('stops.txt')) {
+    if (stopIds.has(r.stop_id)) err('stops.txt', `stop_id "${r.stop_id}" が重複しています`)
+    stopIds.add(r.stop_id)
+  }
   const groupIds = new Set(table('location_groups.txt').map((r) => r.location_group_id))
   const locationIds = new Set<string>()
   if (files['locations.geojson']) {

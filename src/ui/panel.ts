@@ -2,14 +2,14 @@
 // 入力は change イベントで拾う（input だと再描画でフォーカスが飛ぶ）。
 // 地図の上に浮かぶ操作チップ（区域を描く／場所を置く）も、ここから同じ状態で描く。
 
-import { buildFlexFiles, needsStops, needsZone } from '../gtfs/flexWriter'
+import { buildFlexFiles, emptyArea, needsStops, needsZone } from '../gtfs/flexWriter'
 import { readFlexFiles } from '../gtfs/flexReader.ts'
 import { exampleService } from '../gtfs/example'
 import { validateFlexFiles } from '../gtfs/validate'
 import { buildZip, downloadBytes } from '../gtfs/zip'
 import { savePreview } from '../preview'
-import { getState, setState, subscribe, updateService } from '../state'
-import { PATTERN_LABEL, type DemandService, type OperationPattern, type ValidationIssue } from '../types'
+import { getState, setState, subscribe, updateArea, updateService } from '../state'
+import { PATTERN_LABEL, type Agency, type DemandArea, type OperationPattern, type ValidationIssue } from '../types'
 import { fitToService } from './map'
 import { LOGO_SVG, showIntro } from './intro'
 
@@ -17,6 +17,11 @@ const DAY_LABEL = ['月', '火', '水', '木', '金', '土', '日']
 
 function esc(s: string | number | undefined): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+}
+
+/** "20261229" → "2026/12/29"（表示用） */
+function fmtYmd(d: string): string {
+  return d.length === 8 ? `${d.slice(0, 4)}/${d.slice(4, 6)}/${d.slice(6)}` : d
 }
 
 // 運行形態ごとの補足と図。図は「区域（点線の塊）」「決まった場所（点）」「向き（矢印）」だけで描く。
@@ -54,19 +59,19 @@ interface Step {
   skip?: boolean
 }
 
-// 手順の進み具合。番号は本当に順番があるので使う。
-function steps(s: DemandService, issues: ValidationIssue[] | null): Step[] {
-  const b = s.bookingRule
-  const zoneNeeded = needsZone(s.pattern)
-  const stopsNeeded = needsStops(s.pattern)
-  const datesOk = s.calendar.startDate.length === 8 && s.calendar.endDate.length === 8
+// 手順の進み具合。番号は本当に順番があるので使う。進み具合は編集中のエリアについて見る。
+function steps(agency: Agency, a: DemandArea, issues: ValidationIssue[] | null): Step[] {
+  const b = a.bookingRule
+  const zoneNeeded = needsZone(a.pattern)
+  const stopsNeeded = needsStops(a.pattern)
+  const datesOk = a.calendar.startDate.length === 8 && a.calendar.endDate.length === 8
   return [
-    { key: 'basic', label: '事業者', done: !!(s.agency.name && s.agency.id && s.routeName && s.routeId) },
+    { key: 'basic', label: '事業者', done: !!(agency.name && agency.id && a.routeName && a.routeId) },
     { key: 'pattern', label: '運行形態', done: true },
-    { key: 'zone', label: '区域', done: !zoneNeeded || (!!s.zone && s.zone.polygon.length >= 3), skip: !zoneNeeded },
-    { key: 'stops', label: '乗降場所', done: !stopsNeeded || s.stops.length > 0, skip: !stopsNeeded },
+    { key: 'zone', label: '区域', done: !zoneNeeded || (!!a.zone && a.zone.polygon.length >= 3), skip: !zoneNeeded },
+    { key: 'stops', label: '乗降場所', done: !stopsNeeded || a.stops.length > 0, skip: !stopsNeeded },
     { key: 'booking', label: '予約', done: b.type === 0 || !!(b.phone || b.bookingUrl) },
-    { key: 'calendar', label: '運行日', done: s.calendar.days.some(Boolean) && s.windows.length > 0 && datesOk },
+    { key: 'calendar', label: '運行日', done: a.calendar.days.some(Boolean) && a.windows.length > 0 && datesOk },
     { key: 'export', label: '出力', done: !!issues && !issues.some((i) => i.level === 'error') },
   ]
 }
@@ -116,13 +121,14 @@ function renderOverlay(): void {
 // ── パネル本体 ────────────────────────────────────
 
 function render(): void {
-  const { service: s, mapMode, draftPolygon, issues } = getState()
-  const b = s.bookingRule
-  const zoneNeeded = needsZone(s.pattern)
-  const stopsNeeded = needsStops(s.pattern)
-  const st = steps(s, issues)
+  const { service: sv, activeArea: ai, mapMode, draftPolygon, issues } = getState()
+  const a = sv.areas[ai]
+  const b = a.bookingRule
+  const zoneNeeded = needsZone(a.pattern)
+  const stopsNeeded = needsStops(a.pattern)
+  const st = steps(sv.agency, a, issues)
   const done = (k: string) => st.find((x) => x.key === k)!.done
-  const isEmpty = !s.agency.name && !s.routeName && s.stops.length === 0 && !s.zone
+  const isEmpty = !sv.agency.name && sv.areas.length === 1 && !a.routeName && a.stops.length === 0 && !a.zone
 
   panelRoot.innerHTML = `
   <div class="panel-inner">
@@ -162,17 +168,31 @@ function render(): void {
   <section class="card" id="sec-basic">
     <div class="card-head"><span class="num ${done('basic') ? 'done' : ''}">${done('basic') ? '✓' : '1'}</span><h2>事業者と路線</h2></div>
     <div class="grid-2">
-      <label class="field"><span>自治体・事業者名</span><input id="agency-name" name="agency.name" value="${esc(s.agency.name)}" placeholder="○○町" autocomplete="organization"></label>
-      <label class="field"><span>事業者ID<span class="opt">半角英数</span></span><input id="agency-id" name="agency.id" value="${esc(s.agency.id)}" placeholder="example_town" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label class="field"><span>自治体・事業者名</span><input id="agency-name" name="agency.name" value="${esc(sv.agency.name)}" placeholder="○○町" autocomplete="organization"></label>
+      <label class="field"><span>事業者ID<span class="opt">半角英数</span></span><input id="agency-id" name="agency.id" value="${esc(sv.agency.id)}" placeholder="example_town" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
     </div>
     <div class="grid-2">
-      <label class="field"><span>サービス名</span><input id="route-name" name="routeName" value="${esc(s.routeName)}" placeholder="○○号"></label>
-      <label class="field"><span>路線ID<span class="opt">半角英数</span></span><input id="route-id" name="routeId" value="${esc(s.routeId)}" placeholder="example_demand" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+      <label class="field"><span>Webサイト</span><input id="agency-url" name="agency.url" type="url" value="${esc(sv.agency.url)}" placeholder="https://" inputmode="url"></label>
+      <label class="field"><span>電話番号</span><input id="agency-phone" name="agency.phone" type="tel" value="${esc(sv.agency.phone)}" placeholder="0000-00-0000"></label>
     </div>
+
+    <div class="area-bar" role="tablist" aria-label="運行エリア">
+      <span class="area-bar-label">エリア</span>
+      ${sv.areas
+        .map(
+          (x, i) =>
+            `<button type="button" role="tab" aria-selected="${i === ai}" class="area-chip ${i === ai ? 'active' : ''}" data-act="area-select" data-i="${i}">${esc(x.routeName || `エリア${i + 1}`)}</button>`,
+        )
+        .join('')}
+      <button type="button" class="area-chip add" data-act="area-add">＋エリアを足す</button>
+    </div>
+    <p class="hint">「滝根地区」「南部線」のように、運行エリア（路線）ごとに分けて入力します。1つだけでも構いません。</p>
+
     <div class="grid-2">
-      <label class="field"><span>Webサイト</span><input id="agency-url" name="agency.url" type="url" value="${esc(s.agency.url)}" placeholder="https://" inputmode="url"></label>
-      <label class="field"><span>電話番号</span><input id="agency-phone" name="agency.phone" type="tel" value="${esc(s.agency.phone)}" placeholder="0000-00-0000"></label>
+      <label class="field"><span>このエリアのサービス名</span><input id="route-name" name="routeName" value="${esc(a.routeName)}" placeholder="○○号（△△地区）"></label>
+      <label class="field"><span>路線ID<span class="opt">半角英数</span></span><input id="route-id" name="routeId" value="${esc(a.routeId)}" placeholder="example_demand" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
     </div>
+    ${sv.areas.length > 1 ? `<button type="button" data-act="area-remove" class="secondary small">このエリアを削除</button>` : ''}
   </section>
 
   <section class="card" id="sec-pattern">
@@ -182,7 +202,7 @@ function render(): void {
     ${(Object.keys(PATTERN_LABEL) as OperationPattern[])
       .map(
         (p) => `<label class="pattern">
-            <input type="radio" id="pattern-${p}" name="pattern" value="${p}" ${s.pattern === p ? 'checked' : ''}>
+            <input type="radio" id="pattern-${p}" name="pattern" value="${p}" ${a.pattern === p ? 'checked' : ''}>
             ${PATTERN_ICON[p]}
             <span class="label">${esc(PATTERN_LABEL[p])}<br><span class="sub">${esc(PATTERN_SUB[p])}</span></span>
           </label>`,
@@ -199,7 +219,7 @@ function render(): void {
     </div>
     ${
       zoneNeeded
-        ? `<label class="field"><span>区域の名前</span><input id="zone-name" name="zone.name" value="${esc(s.zone?.name)}" placeholder="○○町全域"></label>
+        ? `<label class="field"><span>区域の名前</span><input id="zone-name" name="zone.name" value="${esc(a.zone?.name)}" placeholder="○○町全域"></label>
            ${
              mapMode === 'zone'
                ? `<div class="map-status active-zone">
@@ -208,9 +228,9 @@ function render(): void {
                     <button type="button" data-act="zone-undo" class="secondary" ${draftPolygon.length === 0 ? 'disabled' : ''}>1点戻す</button>
                     <button type="button" data-act="zone-cancel" class="secondary">やめる</button>
                   </div>`
-               : s.zone && s.zone.polygon.length >= 3
+               : a.zone && a.zone.polygon.length >= 3
                  ? `<div class="map-status">
-                      <span class="grow">地図に <span class="count">${s.zone.polygon.length}頂点</span> の区域があります</span>
+                      <span class="grow">地図に <span class="count">${a.zone.polygon.length}頂点</span> の区域があります</span>
                       <button type="button" data-act="zone-start" class="zone">描き直す</button>
                       <button type="button" data-act="zone-clear" class="secondary">消す</button>
                     </div>`
@@ -238,12 +258,12 @@ function render(): void {
                    <button type="button" data-act="stop-done" class="primary">置き終わり</button>
                  </div>`
               : `<div class="map-status">
-                   <span class="grow">${s.stops.length ? `<span class="count">${s.stops.length}か所</span> あります` : '病院・役場・駅など、決まった場所を置きます'}</span>
-                   <button type="button" data-act="stop-start" class="stop">${s.stops.length ? '場所を足す' : '地図で場所を置く'}</button>
+                   <span class="grow">${a.stops.length ? `<span class="count">${a.stops.length}か所</span> あります` : '病院・役場・駅など、決まった場所を置きます'}</span>
+                   <button type="button" data-act="stop-start" class="stop">${a.stops.length ? '場所を足す' : '地図で場所を置く'}</button>
                  </div>`
           }
           <ul class="stops">
-            ${s.stops
+            ${a.stops
               .map(
                 (x, i) => `<li>
                   <span class="pin" aria-hidden="true"></span>
@@ -290,23 +310,51 @@ function render(): void {
     <div class="days" role="group" aria-label="運行する曜日">
       ${DAY_LABEL.map(
         (d, i) =>
-          `<label class="day ${i === 5 ? 'sat' : ''} ${i === 6 ? 'sun' : ''}"><input type="checkbox" id="day-${i}" name="day.${i}" ${s.calendar.days[i] ? 'checked' : ''}>${d}</label>`,
+          `<label class="day ${i === 5 ? 'sat' : ''} ${i === 6 ? 'sun' : ''}"><input type="checkbox" id="day-${i}" name="day.${i}" ${a.calendar.days[i] ? 'checked' : ''}>${d}</label>`,
       ).join('')}
     </div>
     <div class="grid-2">
-      <label class="field"><span>開始日<span class="opt">年月日8桁</span></span><input id="cal-start" name="calendar.startDate" value="${esc(s.calendar.startDate)}" placeholder="20260401" inputmode="numeric" maxlength="8"></label>
-      <label class="field"><span>終了日<span class="opt">年月日8桁</span></span><input id="cal-end" name="calendar.endDate" value="${esc(s.calendar.endDate)}" placeholder="20270331" inputmode="numeric" maxlength="8"></label>
+      <label class="field"><span>開始日<span class="opt">年月日8桁</span></span><input id="cal-start" name="calendar.startDate" value="${esc(a.calendar.startDate)}" placeholder="20260401" inputmode="numeric" maxlength="8"></label>
+      <label class="field"><span>終了日<span class="opt">年月日8桁</span></span><input id="cal-end" name="calendar.endDate" value="${esc(a.calendar.endDate)}" placeholder="20270331" inputmode="numeric" maxlength="8"></label>
     </div>
+
+    <div class="closed-block">
+      <span class="field-label">お休みの日<span class="opt">祝日・年末年始など</span></span>
+      <div class="closed-dates">
+        ${(a.calendar.closedDates ?? [])
+          .map(
+            (d) =>
+              `<span class="closed-chip">${esc(fmtYmd(d))}<button type="button" data-act="closed-remove" data-d="${esc(d)}" class="x" aria-label="${esc(fmtYmd(d))} を削除">×</button></span>`,
+          )
+          .join('')}
+      </div>
+      <div class="closed-add-row">
+        <input type="date" id="closed-date" aria-label="お休みにする日">
+        <button type="button" data-act="closed-add" class="secondary small">この日を休みにする</button>
+      </div>
+    </div>
+
     <p class="hint">時間帯ごとに1便になります。昼休みがあるなら午前と午後に分けてください。</p>
     <ul class="windows">
-      ${s.windows
+      ${a.windows
         .map(
           (w, i) => `<li>
-            <span class="trip">${i + 1}便</span>
-            <input id="win-${i}-start" name="window.${i}.start" type="time" value="${esc(w.start)}" aria-label="${i + 1}便の開始">
-            <span class="tilde">〜</span>
-            <input id="win-${i}-end" name="window.${i}.end" type="time" value="${esc(w.end)}" aria-label="${i + 1}便の終了">
-            <button type="button" data-act="window-remove" data-i="${i}" class="x" aria-label="${i + 1}便を削除">×</button>
+            <div class="window-row">
+              <span class="trip">${i + 1}便</span>
+              <input id="win-${i}-start" name="window.${i}.start" type="time" value="${esc(w.start)}" aria-label="${i + 1}便の開始">
+              <span class="tilde">〜</span>
+              <input id="win-${i}-end" name="window.${i}.end" type="time" value="${esc(w.end)}" aria-label="${i + 1}便の終了">
+              <button type="button" data-act="window-remove" data-i="${i}" class="x" aria-label="${i + 1}便を削除">×</button>
+            </div>
+            <label class="win-early-toggle"><input type="checkbox" id="win-${i}-early" name="window.${i}.early" ${w.booking ? 'checked' : ''}>この便だけ前日締切にする</label>
+            ${
+              w.booking
+                ? `<div class="indent"><div class="grid-2">
+                     <label class="field"><span>何日前まで</span><input id="win-${i}-lastday" name="winbook.${i}.lastDay" type="number" min="1" inputmode="numeric" value="${esc(w.booking.priorNoticeLastDay ?? 1)}"></label>
+                     <label class="field"><span>その日の何時まで</span><input id="win-${i}-lasttime" name="winbook.${i}.lastTime" type="time" value="${esc(w.booking.priorNoticeLastTime ?? '16:30')}"></label>
+                   </div></div>`
+                : ''
+            }
           </li>`,
         )
         .join('')}
@@ -317,8 +365,8 @@ function render(): void {
   <section class="card" id="sec-export">
     <div class="card-head"><span class="num ${done('export') ? 'done' : ''}">${done('export') ? '✓' : '7'}</span><h2>確かめて出す</h2></div>
     <div class="grid-2">
-      <label class="field"><span>データ公開者名</span><input id="pub-name" name="feedPublisherName" value="${esc(s.feedPublisherName)}" placeholder="${esc(s.agency.name || '○○町')}"></label>
-      <label class="field"><span>公開者URL</span><input id="pub-url" name="feedPublisherUrl" type="url" value="${esc(s.feedPublisherUrl)}" placeholder="https://" inputmode="url"></label>
+      <label class="field"><span>データ公開者名</span><input id="pub-name" name="feedPublisherName" value="${esc(sv.feedPublisherName)}" placeholder="${esc(sv.agency.name || '○○町')}"></label>
+      <label class="field"><span>公開者URL</span><input id="pub-url" name="feedPublisherUrl" type="url" value="${esc(sv.feedPublisherUrl)}" placeholder="https://" inputmode="url"></label>
     </div>
     ${renderIssues(issues)}
     <p class="note">ここでの検査は簡易なものです。本番のデータは
@@ -372,27 +420,31 @@ function renderIssues(issues: ValidationIssue[] | null): string {
 function onChange(e: Event): void {
   const t = e.target as HTMLInputElement
   if (!t.name) return
-  const s = getState().service
+  const st = getState()
+  const sv = st.service
+  const a = sv.areas[st.activeArea]
   const v = t.value
   const [head, ...rest] = t.name.split('.')
   switch (head) {
     case 'agency':
-      updateService({ agency: { ...s.agency, [rest[0]]: v } })
+      updateService({ agency: { ...sv.agency, [rest[0]]: v } })
       break
-    case 'routeName':
-    case 'routeId':
     case 'feedPublisherName':
     case 'feedPublisherUrl':
       updateService({ [head]: v })
       break
+    case 'routeName':
+    case 'routeId':
+      updateArea({ [head]: v })
+      break
     case 'pattern':
-      updateService({ pattern: v as OperationPattern })
+      updateArea({ pattern: v as OperationPattern })
       break
     case 'zone':
-      updateService({ zone: { id: s.zone?.id ?? 'zone_1', polygon: s.zone?.polygon ?? [], name: v } })
+      updateArea({ zone: { id: a.zone?.id ?? 'zone_1', polygon: a.zone?.polygon ?? [], name: v } })
       break
     case 'booking': {
-      const b = { ...s.bookingRule }
+      const b = { ...a.bookingRule }
       if (rest[0] === 'type') {
         b.type = Number(v) as 0 | 1 | 2
         if (b.type === 2) {
@@ -406,22 +458,56 @@ function onChange(e: Event): void {
       else if (rest[0] === 'phone') b.phone = v
       else if (rest[0] === 'url') b.bookingUrl = v
       else if (rest[0] === 'message') b.message = v
-      updateService({ bookingRule: b })
+      updateArea({ bookingRule: b })
       break
     }
     case 'day': {
-      const days = [...s.calendar.days] as typeof s.calendar.days
+      const days = [...a.calendar.days] as typeof a.calendar.days
       days[Number(rest[0])] = t.checked
-      updateService({ calendar: { ...s.calendar, days } })
+      updateArea({ calendar: { ...a.calendar, days } })
       break
     }
     case 'calendar':
-      updateService({ calendar: { ...s.calendar, [rest[0]]: v.replace(/\D/g, '') } })
+      updateArea({ calendar: { ...a.calendar, [rest[0]]: v.replace(/\D/g, '') } })
       break
     case 'window': {
       const i = Number(rest[0])
-      const windows = s.windows.map((w, j) => (j === i ? { ...w, [rest[1]]: v } : w))
-      updateService({ windows })
+      if (rest[1] === 'early') {
+        // 「この便だけ前日締切」。共通ルールの連絡先を引き継いだ上書きルールを付け外しする
+        const windows = a.windows.map((w, j) => {
+          if (j !== i) return w
+          if (!t.checked) return { start: w.start, end: w.end }
+          return {
+            ...w,
+            booking: {
+              id: '',
+              type: 2 as const,
+              priorNoticeLastDay: 1,
+              priorNoticeLastTime: '16:30',
+              message: a.bookingRule.message,
+              phone: a.bookingRule.phone,
+              infoUrl: a.bookingRule.infoUrl,
+              bookingUrl: a.bookingRule.bookingUrl,
+            },
+          }
+        })
+        updateArea({ windows })
+      } else {
+        const windows = a.windows.map((w, j) => (j === i ? { ...w, [rest[1]]: v } : w))
+        updateArea({ windows })
+      }
+      break
+    }
+    case 'winbook': {
+      const i = Number(rest[0])
+      const windows = a.windows.map((w, j) => {
+        if (j !== i || !w.booking) return w
+        const b = { ...w.booking }
+        if (rest[1] === 'lastDay') b.priorNoticeLastDay = Number(v)
+        else if (rest[1] === 'lastTime') b.priorNoticeLastTime = v
+        return { ...w, booking: b }
+      })
+      updateArea({ windows })
       break
     }
   }
@@ -431,7 +517,8 @@ function onClick(e: Event): void {
   const btn = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')
   if (!btn) return
   const st = getState()
-  const s = st.service
+  const sv = st.service
+  const a = sv.areas[st.activeArea]
   switch (btn.dataset.act) {
     case 'goto': {
       const el = panelRoot.querySelector<HTMLElement>(`#${btn.dataset.target}`)
@@ -439,12 +526,38 @@ function onClick(e: Event): void {
       break
     }
     case 'load-example':
-      setState({ service: exampleService(), draftPolygon: [], mapMode: 'none', issues: null })
+      setState({ service: exampleService(), activeArea: 0, draftPolygon: [], mapMode: 'none', issues: null })
       fitToService()
       break
     case 'show-intro':
       showIntro()
       break
+    case 'area-select':
+      setState({ activeArea: Number(btn.dataset.i), mapMode: 'none', draftPolygon: [] })
+      fitToService()
+      break
+    case 'area-add':
+      setState((s) => ({
+        service: { ...s.service, areas: [...s.service.areas, emptyArea(s.service.areas.length + 1)] },
+        activeArea: s.service.areas.length,
+        mapMode: 'none',
+        draftPolygon: [],
+        issues: null,
+      }))
+      break
+    case 'area-remove': {
+      if (sv.areas.length <= 1) break
+      if (!window.confirm(`「${a.routeName || `エリア${st.activeArea + 1}`}」を削除しますか？`)) break
+      setState((s) => ({
+        service: { ...s.service, areas: s.service.areas.filter((_, i) => i !== s.activeArea) },
+        activeArea: Math.max(0, s.activeArea - 1),
+        mapMode: 'none',
+        draftPolygon: [],
+        issues: null,
+      }))
+      fitToService()
+      break
+    }
     case 'zone-start':
       setState({ mapMode: 'zone', draftPolygon: [] })
       scrollToMapOnPhone()
@@ -456,11 +569,11 @@ function onClick(e: Event): void {
       setState({ mapMode: 'none', draftPolygon: [] })
       break
     case 'zone-finish':
-      updateService({ zone: { id: s.zone?.id ?? 'zone_1', name: s.zone?.name || '運行区域', polygon: st.draftPolygon } })
+      updateArea({ zone: { id: a.zone?.id ?? 'zone_1', name: a.zone?.name || '運行区域', polygon: st.draftPolygon } })
       setState({ mapMode: 'none', draftPolygon: [] })
       break
     case 'zone-clear':
-      updateService({ zone: undefined })
+      updateArea({ zone: undefined })
       break
     case 'stop-start':
       setState({ mapMode: 'stop' })
@@ -471,42 +584,55 @@ function onClick(e: Event): void {
       break
     case 'stop-remove': {
       const i = Number(btn.dataset.i)
-      updateService({ stops: s.stops.filter((_, j) => j !== i) })
+      updateArea({ stops: a.stops.filter((_, j) => j !== i) })
       break
     }
     case 'window-add': {
-      const last = s.windows[s.windows.length - 1]
-      updateService({ windows: [...s.windows, last ? { start: last.end, end: '17:00' } : { start: '08:00', end: '17:00' }] })
+      const last = a.windows[a.windows.length - 1]
+      updateArea({ windows: [...a.windows, last ? { start: last.end, end: '17:00' } : { start: '08:00', end: '17:00' }] })
       break
     }
     case 'window-remove': {
       const i = Number(btn.dataset.i)
-      updateService({ windows: s.windows.filter((_, j) => j !== i) })
+      updateArea({ windows: a.windows.filter((_, j) => j !== i) })
+      break
+    }
+    case 'closed-add': {
+      const input = panelRoot.querySelector<HTMLInputElement>('#closed-date')
+      const ymd = (input?.value ?? '').replace(/-/g, '')
+      if (ymd.length !== 8) break
+      const dates = [...new Set([...(a.calendar.closedDates ?? []), ymd])].sort()
+      updateArea({ calendar: { ...a.calendar, closedDates: dates } })
+      break
+    }
+    case 'closed-remove': {
+      const d = btn.dataset.d
+      updateArea({ calendar: { ...a.calendar, closedDates: (a.calendar.closedDates ?? []).filter((x) => x !== d) } })
       break
     }
     case 'validate':
-      setState({ issues: validateFlexFiles(buildFlexFiles(s)) })
+      setState({ issues: validateFlexFiles(buildFlexFiles(sv)) })
       panelRoot.querySelector('#sec-export')?.scrollIntoView({ block: 'start' })
       break
     case 'download': {
-      const files = buildFlexFiles(s)
+      const files = buildFlexFiles(sv)
       const issues = validateFlexFiles(files)
       setState({ issues })
       if (issues.some((i) => i.level === 'error')) {
         panelRoot.querySelector('#sec-export')?.scrollIntoView({ block: 'start' })
         return
       }
-      downloadBytes(buildZip(files), `${s.routeId || 'gtfs-flex'}.zip`)
+      downloadBytes(buildZip(files), `${sv.agency.id || sv.areas[0]?.routeId || 'gtfs-flex'}.zip`)
       break
     }
     case 'preview': {
       // 出力と同じ経路（書く → 読む）を通してから住民向けページへ渡す。
       // zip と違い、エラーがあっても見られる（直す手がかりになるので止めない）。
       // ボタンは <a target="_blank">。ここでデータを置いてから、リンクの標準動作で新しいタブが開く
-      const view = readFlexFiles(buildFlexFiles(s))
+      const view = readFlexFiles(buildFlexFiles(sv))
       if (view.areas.length === 0 || !savePreview(view)) {
         e.preventDefault()
-        setState({ issues: validateFlexFiles(buildFlexFiles(s)) })
+        setState({ issues: validateFlexFiles(buildFlexFiles(sv)) })
         panelRoot.querySelector('#sec-export')?.scrollIntoView({ block: 'start' })
         return
       }

@@ -66,7 +66,10 @@ export interface ViewArea {
   closedDates: string[]
   /** calendar_dates で臨時に走る日（YYYYMMDD） */
   extraDates: string[]
+  /** 代表の予約ルール（いちばん長い時間帯の便のもの） */
   booking?: ViewBooking
+  /** 一部の便だけ違う予約ルール（例：朝の便は前日締切）。案内の補足に使う */
+  otherBookings: ViewBooking[]
 }
 
 export interface FlexView {
@@ -219,6 +222,15 @@ export function readFlexFiles(files: Record<string, string>): FlexView {
   const byTrip = new Map<string, Record<string, string>[]>()
   for (const r of table('stop_times.txt')) byTrip.set(r.trip_id, [...(byTrip.get(r.trip_id) ?? []), r])
 
+  // エリアごとの予約ルール候補：booking_rule_id → その窓の長さ（分）。
+  // 一部の便だけ違うルール（朝だけ前日締切など）があるので、
+  // いちばん長い時間帯のルールを「代表」に、残りを補足として持つ
+  const minutes = (t: string): number => {
+    const m = /^(\d{1,2}):(\d{2})/.exec(t)
+    return m ? Number(m[1]) * 60 + Number(m[2]) : 0
+  }
+  const bookingSpans = new Map<string, Map<string, number>>()
+
   for (const [tripId, rows] of byTrip) {
     const info = tripInfo.get(tripId)
     if (!info) continue
@@ -236,21 +248,36 @@ export function readFlexFiles(files: Record<string, string>): FlexView {
         closedDates: closed.get(info.serviceId) ?? [],
         extraDates: extra.get(info.serviceId) ?? [],
         booking: undefined,
+        otherBookings: [],
       }
       areas.set(info.routeId, area)
     }
     for (const row of rows) {
       if (row.pickup_type === '2' || row.pickup_type === '0') addPlaces(area.board, row)
       if (row.drop_off_type === '2' || row.drop_off_type === '0' || row.drop_off_type === '3') addPlaces(area.alight, row)
-      const bookingId = row.pickup_booking_rule_id || row.drop_off_booking_rule_id
-      if (!area.booking && bookingId && bookings.has(bookingId)) area.booking = bookings.get(bookingId)
       const start = row.start_pickup_drop_off_window
       const end = row.end_pickup_drop_off_window
+      const bookingId = row.pickup_booking_rule_id || row.drop_off_booking_rule_id
+      if (bookingId && bookings.has(bookingId)) {
+        const spans = bookingSpans.get(info.routeId) ?? new Map<string, number>()
+        const span = start && end ? Math.max(0, minutes(end) - minutes(start)) : 0
+        spans.set(bookingId, Math.max(spans.get(bookingId) ?? 0, span))
+        bookingSpans.set(info.routeId, spans)
+      }
       if (start && end) {
         const w = { start: toDisplayTime(start), end: toDisplayTime(end) }
         if (!area.windows.some((x) => x.start === w.start && x.end === w.end)) area.windows.push(w)
       }
     }
+  }
+
+  // 代表の予約ルールを決める（いちばん長い時間帯のもの）。残りは補足へ
+  for (const [routeId, spans] of bookingSpans) {
+    const area = areas.get(routeId)
+    if (!area) continue
+    const sorted = [...spans.entries()].sort((a, b) => b[1] - a[1])
+    area.booking = bookings.get(sorted[0][0])
+    area.otherBookings = sorted.slice(1).map(([id]) => bookings.get(id)!).filter(Boolean)
   }
 
   return {

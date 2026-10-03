@@ -1,11 +1,13 @@
 // 単純なストア。フレームワーク無しで足りる規模。
 
-import type { DemandService, ValidationIssue } from './types'
+import type { DemandArea, DemandService, ValidationIssue } from './types'
 
 export type MapMode = 'none' | 'zone' | 'stop'
 
 export interface AppState {
   service: DemandService
+  /** いま編集中のエリア（service.areas の添字） */
+  activeArea: number
   mapMode: MapMode
   /** 描画途中の区域の頂点（[lng, lat]） */
   draftPolygon: [number, number][]
@@ -33,6 +35,21 @@ export function setState(patch: Partial<AppState> | ((s: AppState) => Partial<Ap
 
 export function updateService(patch: Partial<DemandService>): void {
   setState((s) => ({ service: { ...s.service, ...patch }, issues: null }))
+}
+
+/** いま編集中のエリア。パネル・地図はこれを触る */
+export function activeArea(): DemandArea {
+  return state.service.areas[state.activeArea]
+}
+
+export function updateArea(patch: Partial<DemandArea>): void {
+  setState((s) => ({
+    service: {
+      ...s.service,
+      areas: s.service.areas.map((a, i) => (i === s.activeArea ? { ...a, ...patch } : a)),
+    },
+    issues: null,
+  }))
 }
 
 export function subscribe(l: Listener): () => void {

@@ -120,7 +120,8 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
 
 ### 画面の仕組み
 
-- `src/state.ts`：単一ストア。`setState` で全リスナーに通知、`updateService` は入力モデルの差し替え＋検証結果のクリア
+- `src/state.ts`：単一ストア。`setState` で全リスナーに通知、`updateService` は入力モデルの差し替え＋検証結果のクリア。
+  `activeArea` が編集中のエリアの添字で、エリア内の変更は `updateArea`。パネルも地図も編集中のエリアだけを描く
 - 画面は **状態が変わるたびに全部 `innerHTML` で描き直す**（フレームワーク無し）。
   だから入力は `change` で拾う（`input` だと再描画でフォーカスが飛ぶ）。ボタンは `data-act` 属性で束ねて1つのクリックハンドラで分岐
 - `src/ui/panel.ts`：入力パネル本体と、地図の上に浮かぶ操作チップ（`#map-overlay`）の両方を描く。
@@ -148,9 +149,18 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
 - **住民向け確認ページの試作（2026-09-26）**：`check.html` + `src/check.ts`。瑞穂町「チョイソコみずほまち」1件分。
   地図タップ → 近くの乗り場3件と徒歩目安、運行日・時間帯、予約電話（tel: リンク）、出典表示。
   データは `scripts/convert-sample.mjs` で `public/data/*.json` に変換して同梱
-- **実在自治体の試作（2026-10-03）**：田村市「田村らくらくタクシー」の滝根エリア（町内移動・区域方式）を
-  `scripts/make-tamura-takine.mjs` で起こし、zip 生成・検証・読み戻しまで確認。企画書8章の「実際に起こす自治体」の
-  第一候補。残り4エリアとエリア間の便は、複数区域対応（ロードマップ7）ができてから
+- **実在自治体の試作（2026-10-03）**：田村市「田村らくらくタクシー」を `scripts/make-tamura.mjs` で起こし、
+  zip 生成・検証・読み戻しまで確認。滝根・大越・都路常葉・船引の4エリア（船引の3線は1区域に近似）。
+  企画書8章の「実際に起こす自治体」の第一候補。エリア間の便（区域→別の区域）だけ未対応（下のロードマップ7）
+- **複数エリア対応（2026-10-03）**：入力モデルを「事業者＋エリアの列」に変更（`DemandService` = agency + `DemandArea[]`）。
+  画面はエリアのチップで切り替え（地図・各セクションは編集中のエリアを見る）。GTFS はエリアごとに
+  route / trip / location_group を 1:1:1 で出し、service_id・booking_rule_id・zone id・stop_id は routeId から
+  導出して全体一意にする。住民ページもエリア切り替えチップに対応
+- **運休日（2026-10-03）**：`Calendar.closedDates / extraDates` → calendar_dates.txt を出力。
+  画面は「お休みの日」に日付チップで追加。祝日の自動入力は無し（手で入れる）
+- **便ごとの予約締切（2026-10-03）**：`ServiceWindow.booking` で上書き（例：朝の便だけ前日16:30締切）。
+  画面は便の行の「この便だけ前日締切にする」。flexReader は「いちばん長い時間帯のルール」を代表にし、
+  残りを `otherBookings` として住民ページの補足に出す
 - **プレビュー連携（2026-09-26）**：作成画面の「住民ページで見る」→ `check.html#preview`。
   受け渡しは `src/preview.ts`（localStorage 経由・サーバ不要）。中身は flexWriter → flexReader を
   通した FlexView なので、zip に入るものと同じ解釈で表示される。区域だけの形態（乗り場ゼロ）は
@@ -170,8 +180,9 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
 4. **入力の保存**（localStorage で足りる。プレビューの `src/preview.ts` と同じ要領）
 5. 正規バリデータでの確認：出力 zip を https://gtfs-validator.mobilitydata.org/ に投げ、Flex のルールがどこまで見られるか記録
 6. GTFS-JP 第2編 2.5〜2.8 との突合（GTFS-JP 固有ファイルの要否。route_type は実データでは 3 が標準と確認済み）
-7. 複数の区域・複数の予約ルール（今は各1つ）。実データはエリアごとに route / trip / location_group を 1:1:1 で作る（§12）
-8. 運休日・曜日振替（calendar_dates.txt。実データは15件全てが同梱、flexWriter は未出力。flexReader は読める）
+7. エリア間の便（区域→別の区域。田村の「滝根発船引まちなか行き」のような形。今の4形態に無いので
+   zone_to_zone 形態の追加が要る。stop_times は乗車行=区域A・降車行=区域B で仕様上は書ける）
+8. 祝日をまとめて運休日に入れるボタン（今は1日ずつ手で入れる。祝日表の持ち方を決めてから）
 
 後回し（アプリ完成後に検討）：サーバ（固定URL・QR 発行、データ保存と引き継ぎ、ODPT 定期取り込み、住民の照会地点の集計）、LINE 窓口、印刷用チラシ
 

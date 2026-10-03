@@ -67,10 +67,15 @@ export interface BookingRule {
   bookingUrl?: string
 }
 
-/** 運行時間帯。"08:00"〜"17:00" のような1日の中の帯。帯ごとに1便（trip）になる */
+/**
+ * 運行時間帯。"08:00"〜"17:00" のような1日の中の帯。帯ごとに1便（trip）になる。
+ * booking を入れると、この便だけエリア共通の予約ルールと違う締切にできる
+ * （例：朝6:30〜7:30発の便だけ前日16:30まで。田村らくらくタクシーの実例）。
+ */
 export interface ServiceWindow {
   start: string
   end: string
+  booking?: BookingRule
 }
 
 /** 運行日。days は 月〜日 の順。日付は YYYYMMDD */
@@ -79,11 +84,17 @@ export interface Calendar {
   days: [boolean, boolean, boolean, boolean, boolean, boolean, boolean]
   startDate: string
   endDate: string
+  /** 曜日どおりなら走る日のうち、運休にする日（祝日・年末年始など。YYYYMMDD） */
+  closedDates?: string[]
+  /** 曜日どおりなら休みの日のうち、臨時に走らせる日（YYYYMMDD） */
+  extraDates?: string[]
 }
 
-/** 画面で扱う1サービス分の入力。これが揃えば zip が出せる */
-export interface DemandService {
-  agency: Agency
+/**
+ * 1つの運行エリア。GTFS では route / trip / location_group が1つずつになる
+ * （ODPT の実データもエリアごとに 1:1:1 で作る。docs/gtfs-flex-reference.md §12）。
+ */
+export interface DemandArea {
   routeId: string
   routeName: string
   pattern: OperationPattern
@@ -94,6 +105,12 @@ export interface DemandService {
   bookingRule: BookingRule
   calendar: Calendar
   windows: ServiceWindow[]
+}
+
+/** 画面で扱う1サービス分の入力。事業者1つ＋エリア1つ以上。これが揃えば zip が出せる */
+export interface DemandService {
+  agency: Agency
+  areas: DemandArea[]
   feedPublisherName: string
   feedPublisherUrl: string
 }
