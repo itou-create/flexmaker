@@ -15,6 +15,7 @@ import { loadPreview } from './preview'
 import { areaColor } from './areaColors'
 import { bookingText, daysText, windowsText } from './viewText'
 import { bookingNow } from './bookingNow'
+import { getGoogleMapsKey } from './mapsKey'
 import type { NoticeItem } from './types'
 
 interface DemoSource {
@@ -88,31 +89,103 @@ let data: DemoData
 let area: ViewArea
 let picked: { lat: number; lon: number } | null = null
 
-let map: L.Map
-let homeMarker: L.CircleMarker | null = null
-let nearLines: L.Polyline[] = []
-const stopLayer = L.layerGroup()
+// ── 地図エンジン ─────────────────────────────
+// Google マップ（運営側キーがあり Maps JavaScript API が使えるとき）を優先し、
+// 使えなければ Leaflet ＋ 地理院タイルに自動で切り替える（キー無し・API未有効・
+// 社内ネットワークで Google がブロック、どの場合でもページは動く）。
 
-function mountMap(): void {
+let lmap: L.Map | null = null
+let lHome: L.CircleMarker | null = null
+let lLines: L.Polyline[] = []
+const lStopLayer = L.layerGroup()
+
+// Google 側。型パッケージを増やさないため any で扱う
+/* eslint-disable @typescript-eslint/no-explicit-any */
+let gmap: any = null
+let gShapes: any[] = []
+let gHome: any = null
+let gLines: any[] = []
+
+const gapi = (): any => (window as unknown as { google?: unknown }).google
+
+/** 地図のタップ（両エンジン共通の処理） */
+function handleTap(lat: number, lon: number): void {
+  picked = { lat, lon }
+  // 押した場所が別のエリアの区域の中なら、そのエリアに切り替える
+  // （住民はエリアの境目を知らないので、地図に任せる）
+  const hit = data.view.areas.find((x) =>
+    [...x.board.zones, ...x.alight.zones].some((z) => insideZone(lat, lon, z.rings)),
+  )
+  if (hit && hit !== area) area = hit
+  renderMap()
+  renderPanel()
+  document.getElementById('map-hint')?.setAttribute('hidden', '')
+}
+
+function loadGoogleScript(key: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(false), 7000)
+    const w = window as unknown as Record<string, unknown>
+    w.__gmapsReady = () => {
+      clearTimeout(t)
+      resolve(true)
+    }
+    const s = document.createElement('script')
+    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&language=ja&region=JP&loading=async&callback=__gmapsReady`
+    s.onerror = () => {
+      clearTimeout(t)
+      resolve(false)
+    }
+    document.head.appendChild(s)
+  })
+}
+
+/** Google の地図を試す。キー無し・読み込み失敗・認証エラー（API未有効等）なら false */
+async function tryGoogleMap(el: HTMLElement): Promise<boolean> {
+  const key = getGoogleMapsKey()
+  if (!key) return false
+  let failed = false
+  ;(window as unknown as Record<string, unknown>).gm_authFailure = () => {
+    failed = true
+  }
+  if (!(await loadGoogleScript(key))) return false
+  const g = gapi()
+  if (!g?.maps) return false
+  gmap = new g.maps.Map(el, {
+    center: { lat: 36.2, lng: 138.3 },
+    zoom: 5,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    clickableIcons: false,
+    gestureHandling: 'greedy',
+  })
+  gmap.addListener('click', (e: any) => handleTap(e.latLng.lat(), e.latLng.lng()))
+  // 認証エラー（ApiNotActivatedMapError 等）は読み込みの少し後に届くので、短く待って判定
+  await new Promise((r) => setTimeout(r, 1500))
+  if (failed) {
+    gmap = null
+    el.innerHTML = ''
+    return false
+  }
+  return true
+}
+
+function mountLeaflet(el: HTMLElement): void {
   // ビューを決める前にマーカーを足すと全部同じ点に描かれるので、仮のビューを先に設定しておく
-  map = L.map(document.getElementById('map')!, { zoomControl: true }).setView([36.2, 138.3], 5)
+  lmap = L.map(el, { zoomControl: true }).setView([36.2, 138.3], 5)
   L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png', {
     attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>',
     maxZoom: 18,
-  }).addTo(map)
-  stopLayer.addTo(map)
-  map.on('click', (e: L.LeafletMouseEvent) => {
-    picked = { lat: e.latlng.lat, lon: e.latlng.lng }
-    // 押した場所が別のエリアの区域の中なら、そのエリアに切り替える
-    // （住民はエリアの境目を知らないので、地図に任せる）
-    const hit = data.view.areas.find((x) =>
-      [...x.board.zones, ...x.alight.zones].some((z) => insideZone(picked!.lat, picked!.lon, z.rings)),
-    )
-    if (hit && hit !== area) area = hit
-    renderMap()
-    renderPanel()
-    document.getElementById('map-hint')?.setAttribute('hidden', '')
-  })
+  }).addTo(lmap)
+  lStopLayer.addTo(lmap)
+  lmap.on('click', (e: L.LeafletMouseEvent) => handleTap(e.latlng.lat, e.latlng.lng))
+}
+
+async function mountMap(): Promise<void> {
+  const el = document.getElementById('map')!
+  if (await tryGoogleMap(el)) return
+  mountLeaflet(el)
 }
 
 function nearestStops(lat: number, lon: number, stops: ViewStop[], n: number): { stop: ViewStop; m: number }[] {
@@ -122,8 +195,85 @@ function nearestStops(lat: number, lon: number, stops: ViewStop[], n: number): {
     .slice(0, n)
 }
 
+/** いま見ているエリアの乗降場所（乗る側＋降りる側、重複なし） */
+function mapStopsOf(a: ViewArea): ViewStop[] {
+  const out = [...a.board.stops]
+  for (const st of a.alight.stops) if (!out.some((x) => x.id === st.id)) out.push(st)
+  return out
+}
+
 function renderMap(): void {
-  stopLayer.clearLayers()
+  if (gmap) renderGoogleMap()
+  else renderLeafletMap()
+}
+
+function renderGoogleMap(): void {
+  const g = gapi()
+  for (const s of gShapes) s.setMap(null)
+  gShapes = []
+  // 区域は全エリア分を色分けで描く。見ているエリアだけ濃く
+  data.view.areas.forEach((x, i) => {
+    const active = x === area
+    for (const z of [...x.board.zones, ...x.alight.zones]) {
+      gShapes.push(
+        new g.maps.Polygon({
+          map: gmap,
+          paths: z.rings.map((ring) => ring.map(([lng, lat]) => ({ lat, lng }))),
+          strokeColor: areaColor(i),
+          strokeWeight: active ? 3 : 1.5,
+          strokeOpacity: active ? 1 : 0.55,
+          fillColor: areaColor(i),
+          fillOpacity: active ? 0.14 : 0.05,
+          clickable: false,
+        }),
+      )
+    }
+  })
+  for (const st of mapStopsOf(area)) {
+    gShapes.push(
+      new g.maps.Marker({
+        map: gmap,
+        position: { lat: st.lat, lng: st.lon },
+        title: st.name,
+        clickable: false,
+        icon: { path: g.maps.SymbolPath.CIRCLE, scale: 6, fillColor: '#ffffff', fillOpacity: 1, strokeColor: '#4a80e0', strokeWeight: 2 },
+      }),
+    )
+  }
+
+  if (gHome) gHome.setMap(null)
+  gHome = null
+  for (const l of gLines) l.setMap(null)
+  gLines = []
+  if (picked) {
+    gHome = new g.maps.Marker({
+      map: gmap,
+      position: { lat: picked.lat, lng: picked.lon },
+      title: '乗りたい場所',
+      clickable: false,
+      zIndex: 10,
+      icon: { path: g.maps.SymbolPath.CIRCLE, scale: 10, fillColor: '#f3a4c0', fillOpacity: 0.9, strokeColor: '#b0416f', strokeWeight: 4 },
+    })
+    for (const { stop } of nearestStops(picked.lat, picked.lon, area.board.stops, 3).filter(({ m }) => m <= FAR_M)) {
+      gLines.push(
+        new g.maps.Polyline({
+          map: gmap,
+          path: [
+            { lat: picked.lat, lng: picked.lon },
+            { lat: stop.lat, lng: stop.lon },
+          ],
+          clickable: false,
+          strokeOpacity: 0,
+          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, strokeColor: '#b0416f', strokeWeight: 3, scale: 3 }, offset: '0', repeat: '14px' }],
+        }),
+      )
+    }
+  }
+}
+
+function renderLeafletMap(): void {
+  if (!lmap) return
+  lStopLayer.clearLayers()
   // 区域は全エリア分を色分けで描く（全体が見える）。見ているエリアだけ濃く、他は薄く点線で
   data.view.areas.forEach((x, i) => {
     const active = x === area
@@ -135,23 +285,21 @@ function renderMap(): void {
           : { color: areaColor(i), weight: 1.5, dashArray: '4 5', fillOpacity: 0.05 },
       )
         .bindTooltip(x.name || z.name)
-        .addTo(stopLayer)
+        .addTo(lStopLayer)
     }
   })
-  const mapStops = [...area.board.stops]
-  for (const st of area.alight.stops) if (!mapStops.some((x) => x.id === st.id)) mapStops.push(st)
-  for (const st of mapStops) {
+  for (const st of mapStopsOf(area)) {
     L.circleMarker([st.lat, st.lon], { radius: 6, color: '#4a80e0', weight: 2, fillColor: '#fff', fillOpacity: 1 })
       .bindTooltip(st.name, { direction: 'top', offset: [0, -6] })
-      .addTo(stopLayer)
+      .addTo(lStopLayer)
   }
 
-  if (homeMarker) homeMarker.remove()
-  homeMarker = null
-  for (const l of nearLines) l.remove()
-  nearLines = []
+  if (lHome) lHome.remove()
+  lHome = null
+  for (const l of lLines) l.remove()
+  lLines = []
   if (picked) {
-    homeMarker = L.circleMarker([picked.lat, picked.lon], {
+    lHome = L.circleMarker([picked.lat, picked.lon], {
       radius: 11,
       color: '#b0416f',
       weight: 4,
@@ -159,16 +307,16 @@ function renderMap(): void {
       fillOpacity: 0.9,
     })
       .bindTooltip('乗りたい場所', { permanent: true, direction: 'top', offset: [0, -10], className: 'stop-label' })
-      .addTo(map)
+      .addTo(lmap)
     for (const { stop } of nearestStops(picked.lat, picked.lon, area.board.stops, 3).filter(({ m }) => m <= FAR_M)) {
-      nearLines.push(
+      lLines.push(
         L.polyline(
           [
             [picked.lat, picked.lon],
             [stop.lat, stop.lon],
           ],
           { color: '#b0416f', weight: 3, dashArray: '4 7', opacity: 0.8 },
-        ).addTo(map),
+        ).addTo(lmap),
       )
     }
   }
@@ -311,8 +459,6 @@ function renderPanel(): void {
 }
 
 async function main(): Promise<void> {
-  mountMap()
-
   if (location.hash === '#preview') {
     // 作成画面からのプレビュー（src/preview.ts が localStorage に置いたデータ）
     const p = loadPreview()
@@ -341,8 +487,10 @@ async function main(): Promise<void> {
     sub.textContent = `${data.source!.municipality}「${data.source!.serviceName}」`
     document.title = `うちから乗れる？ — ${data.source!.serviceName}`
   }
-  renderMap()
+  // 文面を先に出してから地図を起こす（Google の判定に1〜2秒かかるため）
   renderPanel()
+  await mountMap()
+  renderMap()
 
   // エリア切り替え・全体表示（エリアが複数あるときだけチップが出る）
   panel.addEventListener('click', (ev) => {
@@ -360,40 +508,57 @@ async function main(): Promise<void> {
   })
 
   // CSS の適用が一瞬遅れて、この時点でも地図のコンテナが 0px のことがある
-  // （そのまま fitBounds すると最大ズームに飛ぶ）。サイズが付いてから一度だけ全体に寄せる。
-  // ResizeObserver は画面回転やパネルの伸縮でも invalidateSize してくれる
+  // （そのまま fitBounds すると最大ズームに飛ぶ）。サイズが付いてから一度だけ全体に寄せる
+  const mapEl = document.getElementById('map')!
   let fitted = false
   const tryFit = (): void => {
-    map.invalidateSize()
-    if (!fitted && map.getSize().y > 0) {
+    if (lmap) lmap.invalidateSize()
+    if (!fitted && mapEl.clientHeight > 0) {
       fitted = true
       // エリアが複数あれば、まず全体（色分け）を見せる
       if (data.view.areas.length > 1) fitAll()
       else fitArea()
     }
   }
-  new ResizeObserver(tryFit).observe(document.getElementById('map')!)
+  new ResizeObserver(tryFit).observe(mapEl)
   tryFit()
 }
 
-function ptsOf(a: ViewArea): L.LatLngExpression[] {
-  const pts: L.LatLngExpression[] = [...a.board.stops, ...a.alight.stops].map((st) => [st.lat, st.lon])
+function ptsOf(a: ViewArea): [number, number][] {
+  const pts: [number, number][] = [...a.board.stops, ...a.alight.stops].map((st) => [st.lat, st.lon])
   for (const z of [...a.board.zones, ...a.alight.zones])
     for (const ring of z.rings) for (const [lng, lat] of ring) pts.push([lat, lng])
   return pts
 }
 
+/** [緯度, 経度] の列が全部入るように寄せる（両エンジン対応） */
+function fitPts(pts: [number, number][]): void {
+  if (pts.length === 0) return
+  if (gmap) {
+    const g = gapi()
+    if (pts.length === 1) {
+      gmap.setCenter({ lat: pts[0][0], lng: pts[0][1] })
+      gmap.setZoom(14)
+      return
+    }
+    const b = new g.maps.LatLngBounds()
+    for (const [lat, lng] of pts) b.extend({ lat, lng })
+    gmap.fitBounds(b, 20)
+  } else if (lmap) {
+    if (pts.length >= 2) lmap.fitBounds(L.latLngBounds(pts as L.LatLngExpression[]), { padding: [20, 20], animate: false })
+    else lmap.setView(pts[0] as L.LatLngExpression, 14, { animate: false })
+  }
+}
+
 /** 見ているエリアの乗り場と区域の全体が入るように寄せる */
 function fitArea(): void {
-  const pts = ptsOf(area)
-  if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [20, 20], animate: false })
-  else map.setView([35.77, 139.35], 13, { animate: false })
+  fitPts(ptsOf(area))
 }
 
 /** 全エリアが入るように寄せる（「全体を見る」） */
 function fitAll(): void {
   const pts = data.view.areas.flatMap(ptsOf)
-  if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [20, 20], animate: false })
+  if (pts.length >= 2) fitPts(pts)
   else fitArea()
 }
 
