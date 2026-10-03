@@ -1,19 +1,9 @@
 import './styles.css'
-import { initState } from './state'
+import { initState, subscribe } from './state'
 import { mountMap } from './ui/map'
 import { mountPanel } from './ui/panel'
 import { mountIntro } from './ui/intro'
-import { emptyArea } from './gtfs/flexWriter'
-import type { DemandService } from './types'
-
-function emptyService(): DemandService {
-  return {
-    agency: { id: '', name: '', url: '', phone: '' },
-    areas: [emptyArea(1)],
-    feedPublisherName: '',
-    feedPublisherUrl: '',
-  }
-}
+import { emptyService, loadDraft, saveDraft } from './draft'
 
 const app = document.getElementById('app')!
 app.innerHTML = `
@@ -27,7 +17,16 @@ app.innerHTML = `
   <div id="intro" class="intro" hidden></div>
 `
 
-initState({ service: emptyService(), activeArea: 0, mapMode: 'none', draftPolygon: [], issues: null })
+// 前回の入力があれば続きから（この端末の localStorage）。無ければ白紙
+const draft = loadDraft()
+initState({
+  service: draft?.service ?? emptyService(),
+  activeArea: draft?.activeArea ?? 0,
+  mapMode: 'none',
+  draftPolygon: [],
+  issues: null,
+})
+subscribe((s) => saveDraft(s.service, s.activeArea))
 mountMap(document.getElementById('map')!)
 mountPanel(document.getElementById('panel')!, document.getElementById('map-overlay')!)
 mountIntro(document.getElementById('intro')!)

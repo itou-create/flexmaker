@@ -17,9 +17,10 @@ export default defineConfig({
     emptyOutDir: false,
     rollupOptions: {
       input: {
-        // 担当者の作成画面と、住民向け確認ページの2ページ構成
+        // 担当者の作成画面・住民向け確認ページ・チラシ印刷の3ページ構成
         main: fileURLToPath(new URL('./index.html', import.meta.url)),
         check: fileURLToPath(new URL('./check.html', import.meta.url)),
+        flyer: fileURLToPath(new URL('./flyer.html', import.meta.url)),
       },
     },
   },

@@ -13,6 +13,7 @@ import 'leaflet/dist/leaflet.css'
 import type { FlexView, ViewArea, ViewStop } from './gtfs/flexReader.ts'
 import { loadPreview } from './preview'
 import { areaColor } from './areaColors'
+import { bookingText, daysText, windowsText } from './viewText'
 
 interface DemoSource {
   municipality: string
@@ -29,28 +30,8 @@ interface DemoData {
   view: FlexView
 }
 
-const DAY_NAMES = ['月', '火', '水', '木', '金', '土', '日']
-
 /** いちばん近い乗り場がこれより遠ければ「エリアの外」と伝える（徒歩約25分） */
 const FAR_M = 2000
-
-function daysText(days: readonly boolean[]): string {
-  if (days.every(Boolean)) return '毎日'
-  if (days.slice(0, 5).every(Boolean) && !days[5] && !days[6]) return '月曜日から金曜日'
-  return days.map((on, i) => (on ? DAY_NAMES[i] : null)).filter(Boolean).join('・') + '曜日'
-}
-
-function bookingText(a: ViewArea): string {
-  const b = a.booking
-  if (!b) return ''
-  if (b.type === 0) return '予約なしで、その場で呼べます。'
-  if (b.type === 2) {
-    const day = b.lastDay === 1 ? '前の日' : `${b.lastDay ?? 1}日前`
-    return b.lastTime ? `${day}の ${b.lastTime} までに予約してください。` : `${day}までに予約してください。`
-  }
-  if (b.durationMin && b.durationMin > 0) return `乗りたい時刻の ${b.durationMin}分前 までに予約してください。`
-  return '当日でも予約できます。'
-}
 
 /** 地点間の距離（メートル）。近所の徒歩距離なので簡易式で足りる */
 function distanceM(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -320,7 +301,7 @@ function pickedCard(): string {
 function renderPanel(): void {
   const s = data.source
   const b = area.booking
-  const windows = area.windows.map((w) => `${w.start}〜${w.end}`).join('、')
+  const windows = windowsText(area)
   const closedNote = area.closedDates.length > 0 ? '（年末年始などお休みの日があります）' : ''
 
   const phone = b?.phone ?? data.view.agencyPhone
@@ -339,6 +320,7 @@ function renderPanel(): void {
     b?.infoUrl ? `<p><a href="${esc(b.infoUrl)}" target="_blank" rel="noopener">くわしい案内を見る</a></p>` : '',
   ].join('')
 
+  const flyerLink = `<p class="check-small"><a href="flyer.html${location.hash === '#preview' ? '#preview' : ''}" target="_blank" rel="noopener">🖨 このご案内をチラシ（A4）にして印刷する</a></p>`
   const footer = s
     ? `<footer class="check-foot">
       <p>このページは公式の案内ではありません。最新の運行・予約方法は ${esc(s.provider)} の案内でご確認ください。</p>
@@ -382,6 +364,7 @@ function renderPanel(): void {
       <h2>予約のしかた</h2>
       ${bookingLines}
     </section>
+    ${flyerLink}
     ${footer}
   `
 }

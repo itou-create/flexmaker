@@ -9,6 +9,8 @@ import { tamuraService } from '../gtfs/tamura.ts'
 import { validateFlexFiles } from '../gtfs/validate'
 import { buildZip, downloadBytes } from '../gtfs/zip'
 import { savePreview } from '../preview'
+import { zoneFromGeojson } from '../gtfs/geo'
+import { clearDraft, emptyService } from '../draft'
 import { getState, setState, subscribe, updateArea, updateService } from '../state'
 import { areaColor } from '../areaColors'
 import { PATTERN_LABEL, type Agency, type DemandArea, type OperationPattern, type ValidationIssue } from '../types'
@@ -246,7 +248,12 @@ function render(): void {
                       <span class="grow">乗り降りできる範囲を地図に描きます</span>
                       <button type="button" data-act="zone-start" class="zone">地図で区域を描く</button>
                     </div>`
-           }`
+           }
+           <div class="zone-import">
+             <label class="file-btn">区域ファイルを読み込む（GeoJSON）<input type="file" name="zonefile" accept=".geojson,.json,application/geo+json,application/json" hidden></label>
+             <span class="hint-inline">行政界などの複雑な形は、手で描かずにファイルから。国土数値情報（行政区域）や
+             市のGIS担当からもらった GeoJSON を選ぶと、自動で軽く間引いて区域にします。</span>
+           </div>`
         : `<p class="skip-note">決まった乗降場所どうしを結ぶ形態なので、区域はいりません。</p>`
     }
   </section>
@@ -377,7 +384,11 @@ function render(): void {
       <label class="field"><span>公開者URL</span><input id="pub-url" name="feedPublisherUrl" type="url" value="${esc(sv.feedPublisherUrl)}" placeholder="https://" inputmode="url"></label>
     </div>
     ${renderIssues(issues)}
-    <p class="note">ここでの検査は簡易なものです。本番のデータは
+    <div class="export-extra">
+      <a data-act="flyer" class="btn" href="flyer.html#preview" target="_blank" rel="noopener">チラシ（A4）を印刷する</a>
+      <button type="button" data-act="reset" class="secondary small">入力を白紙に戻す</button>
+    </div>
+    <p class="note">入力はこの端末に自動保存されます（次に開いたとき続きから）。ここでの検査は簡易なものです。本番のデータは
       <a href="https://gtfs-validator.mobilitydata.org/" target="_blank" rel="noopener">MobilityData の正規バリデータ</a>にもかけてください。</p>
   </section>
   </div>
@@ -433,6 +444,30 @@ function onChange(e: Event): void {
   const a = sv.areas[st.activeArea]
   const v = t.value
   const [head, ...rest] = t.name.split('.')
+  if (head === 'zonefile') {
+    const file = t.files?.[0]
+    if (!file) return
+    void file.text().then((text) => {
+      try {
+        const z = zoneFromGeojson(text)
+        const cur = getState()
+        const area = cur.service.areas[cur.activeArea]
+        updateArea({
+          zone: {
+            id: area.zone?.id ?? 'zone_1',
+            name: area.zone?.name || z.name || '運行区域',
+            polygon: z.polygon,
+          },
+        })
+        setState({ mapMode: 'none', draftPolygon: [] })
+        fitToService()
+        window.alert(`区域を読み込みました（${z.originalPoints}点 → ${z.polygon.length}点に間引き）`)
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : '区域ファイルを読み込めませんでした')
+      }
+    })
+    return
+  }
   switch (head) {
     case 'agency':
       updateService({ agency: { ...sv.agency, [rest[0]]: v } })
@@ -643,8 +678,9 @@ function onClick(e: Event): void {
       downloadBytes(buildZip(files), `${sv.agency.id || sv.areas[0]?.routeId || 'gtfs-flex'}.zip`)
       break
     }
-    case 'preview': {
-      // 出力と同じ経路（書く → 読む）を通してから住民向けページへ渡す。
+    case 'preview':
+    case 'flyer': {
+      // 出力と同じ経路（書く → 読む）を通してから住民向けページ／チラシページへ渡す。
       // zip と違い、エラーがあっても見られる（直す手がかりになるので止めない）。
       // ボタンは <a target="_blank">。ここでデータを置いてから、リンクの標準動作で新しいタブが開く
       const view = readFlexFiles(buildFlexFiles(sv))
@@ -654,6 +690,12 @@ function onClick(e: Event): void {
         panelRoot.querySelector('#sec-export')?.scrollIntoView({ block: 'start' })
         return
       }
+      break
+    }
+    case 'reset': {
+      if (!window.confirm('入力をすべて消して白紙に戻しますか？（この端末の自動保存も消えます）')) break
+      clearDraft()
+      setState({ service: emptyService(), activeArea: 0, mapMode: 'none', draftPolygon: [], issues: null })
       break
     }
   }

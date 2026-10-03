@@ -872,3 +872,95 @@ button.small { font-size: 12.5px; padding: 6px 12px; }
 }
 .area-chip .area-dot { margin-bottom: -1px; }
 .check-area-chip .area-dot { width: 12px; height: 12px; margin-bottom: -1px; }
+
+/* ── チラシ印刷ページ（flyer.html）────────────── */
+
+.flyer-toolbar {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.flyer-toolbar span { display: block; font-size: 12.5px; color: var(--muted); }
+
+.flyer {
+  background: #fff;
+  color: #22372b;
+  max-width: 820px;
+  margin: 0 auto 24px;
+  padding: 36px 40px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+.flyer-head { border-left: 10px solid var(--green); padding-left: 16px; margin-bottom: 18px; }
+.flyer-kicker { font-size: 15px; color: #4f6656; }
+.flyer-head h1 { margin: 2px 0; font-size: 30px; line-height: 1.3; }
+.flyer-muni { font-size: 15px; color: #4f6656; }
+.flyer-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.flyer-map svg { width: 100%; height: auto; background: #f4f8f5; border-radius: 12px; }
+.flyer-caption { font-size: 14px; margin: 8px 0 0; }
+.flyer-info section { margin-bottom: 14px; }
+.flyer-info h2 {
+  font-size: 15px;
+  margin: 0 0 4px;
+  color: #227a4d;
+  border-bottom: 2px solid #cfeedb;
+  padding-bottom: 2px;
+}
+.flyer-big { font-size: 19px; font-weight: 700; margin: 4px 0; line-height: 1.6; }
+.flyer-note { font-size: 13px; margin: 4px 0; color: #4f6656; }
+.flyer-phone {
+  background: #e9f7ee;
+  border: 2px solid #34a06a;
+  border-radius: 14px;
+  padding: 10px 16px;
+  text-align: center;
+}
+.flyer-phone span { display: block; font-size: 14px; color: #227a4d; font-weight: 700; }
+.flyer-phone strong { font-size: 34px; letter-spacing: 0.04em; color: #1c5c3c; }
+.flyer-foot { margin-top: 18px; border-top: 1px dashed #d3e4d6; padding-top: 12px; }
+.flyer-qr { display: flex; align-items: center; gap: 14px; }
+.flyer-qr img { width: 96px; height: 96px; }
+.flyer-qr-text { font-size: 14px; line-height: 1.6; word-break: break-all; }
+.flyer-src { margin-top: 8px; font-size: 11.5px; color: #7d9184; }
+
+@media (max-width: 700px) {
+  .flyer { padding: 20px; }
+  .flyer-cols { grid-template-columns: 1fr; }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+  .flyer {
+    max-width: none;
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    page-break-after: always;
+  }
+  .flyer-cols { grid-template-columns: 1fr 1fr; }
+}
+@page { size: A4 portrait; margin: 12mm; }
+
+.zone-import { margin-top: 10px; }
+.file-btn {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 2px dashed var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.file-btn:hover { background: var(--surface-2); }
+.hint-inline { display: block; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.export-extra { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 4px; }
