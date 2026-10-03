@@ -1,43 +1,40 @@
-/* ─────────────────────────────────────────────
-   flexmaker  画面スタイル
-   自治体の担当者がスマホで上から順に埋める前提。
-   丸ゴシックと角丸で親しみやすく。色は「若葉の緑」を軸に、
-   地図の描画色（区域＝みかん色、場所＝そら色）を分ける。
-   ───────────────────────────────────────────── */
+/* 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+   flexmaker  逕ｻ髱｢繧ｹ繧ｿ繧､繝ｫ
+   閾ｪ豐ｻ菴薙・諡・ｽ楢・′繧ｹ繝槭・縺ｧ荳翫°繧蛾・↓蝓九ａ繧句燕謠舌・   荳ｸ繧ｴ繧ｷ繝・け縺ｨ隗剃ｸｸ縺ｧ隕ｪ縺励∩繧・☆縺上り牡縺ｯ縲瑚凶闡峨・邱代阪ｒ霆ｸ縺ｫ縲・   蝨ｰ蝗ｳ縺ｮ謠冗判濶ｲ・亥玄蝓滂ｼ昴∩縺九ｓ濶ｲ縲∝ｴ謇・昴◎繧芽牡・峨ｒ蛻・￠繧九・   笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 
 :root {
   color-scheme: light;
 
-  /* 地色 */
-  --ground: #eef6ef;        /* うすい若草色 */
+  /* 蝨ｰ濶ｲ */
+  --ground: #eef6ef;        /* 縺・☆縺・凶闕芽牡 */
   --surface: #ffffff;
   --surface-2: #e4f0e6;
   --line: #d3e4d6;
   --line-strong: #b6d0bb;
 
-  /* 文字 */
+  /* 譁・ｭ・*/
   --ink: #22372b;
   --ink-2: #4f6656;
   --muted: #7d9184;
 
-  /* アクセント（主役はひとつ） */
+  /* 繧｢繧ｯ繧ｻ繝ｳ繝茨ｼ井ｸｻ蠖ｹ縺ｯ縺ｲ縺ｨ縺､・・*/
   --green: #34a06a;
   --green-deep: #227a4d;
   --green-soft: #cfeedb;
   --green-tint: #e9f7ee;
 
-  /* 地図上の意味色（アクセントとは別） */
-  --zone: #f08a3c;          /* 区域を描く＝みかん色 */
+  /* 蝨ｰ蝗ｳ荳翫・諢丞袖濶ｲ・医い繧ｯ繧ｻ繝ｳ繝医→縺ｯ蛻･・・*/
+  --zone: #f08a3c;          /* 蛹ｺ蝓溘ｒ謠上￥・昴∩縺九ｓ濶ｲ */
   --zone-soft: #ffe8d4;
-  --stop: #4a80e0;          /* 乗降場所＝そら色 */
+  --stop: #4a80e0;          /* 荵鈴剄蝣ｴ謇・昴◎繧芽牡 */
   --stop-soft: #dfe9ff;
 
-  /* ちいさな差し色 */
+  /* 縺｡縺・＆縺ｪ蟾ｮ縺苓牡 */
   --pink: #f3a4c0;
   --pink-soft: #ffe4ee;
   --pink-ink: #b0416f;
 
-  /* 状態色 */
+  /* 迥ｶ諷玖牡 */
   --ok: #2e9463;
   --warn: #c98410;
   --warn-soft: #fff1d6;
@@ -65,9 +62,8 @@ body {
 }
 #app { height: 100%; }
 
-/* ── 全体レイアウト ────────────────────────
-   スマホ：地図が上に固定、パネルが下でスクロール。
-   PC   ：地図が左に広く、パネルは右の固定幅。 */
+/* 笏笏 蜈ｨ菴薙Ξ繧､繧｢繧ｦ繝・笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+   繧ｹ繝槭・・壼慍蝗ｳ縺御ｸ翫↓蝗ｺ螳壹√ヱ繝阪Ν縺御ｸ九〒繧ｹ繧ｯ繝ｭ繝ｼ繝ｫ縲・   PC   ・壼慍蝗ｳ縺悟ｷｦ縺ｫ蠎・￥縲√ヱ繝阪Ν縺ｯ蜿ｳ縺ｮ蝗ｺ螳壼ｹ・・*/
 .layout {
   display: grid;
   height: 100%;
@@ -92,11 +88,11 @@ body {
   * { transition: none !important; }
 }
 
-/* ── 地図の上に浮かぶ操作チップ ─────────── */
+/* 笏笏 蝨ｰ蝗ｳ縺ｮ荳翫↓豬ｮ縺九・謫堺ｽ懊メ繝・・ 笏笏笏笏笏笏笏笏笏笏笏 */
 .map-overlay {
   position: absolute;
   inset: 12px 12px auto 12px;
-  z-index: 1000;              /* Leaflet のコントロールより上 */
+  z-index: 1000;              /* Leaflet 縺ｮ繧ｳ繝ｳ繝医Ο繝ｼ繝ｫ繧医ｊ荳・*/
   pointer-events: none;
   display: flex;
   justify-content: center;
@@ -126,7 +122,7 @@ body {
 .map-chip .count { font-variant-numeric: tabular-nums; color: var(--muted); }
 .map-chip button { padding: 6px 12px; font-size: 13px; }
 
-/* Leaflet の状態表示 */
+/* Leaflet 縺ｮ迥ｶ諷玖｡ｨ遉ｺ */
 .leaflet-container { font-family: var(--font); }
 .leaflet-container.mode-zone, .leaflet-container.mode-stop { cursor: crosshair; }
 .leaflet-container.mode-zone { box-shadow: inset 0 0 0 4px var(--zone); }
@@ -145,9 +141,9 @@ body {
 }
 .stop-label::before { display: none; }
 
-/* ── パネルの中身 ───────────────────────── */
+/* 笏笏 繝代ロ繝ｫ縺ｮ荳ｭ霄ｫ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 .panel-inner {
-  padding: 0 14px 100px;      /* 下は固定バーの分を空ける */
+  padding: 0 14px 100px;      /* 荳九・蝗ｺ螳壹ヰ繝ｼ縺ｮ蛻・ｒ遨ｺ縺代ｋ */
   max-width: 560px;
   margin: 0 auto;
 }
@@ -194,7 +190,7 @@ body {
 }
 .card-head .tag { background: var(--surface-2); color: var(--ink-2); }
 
-/* 手順の進み具合（本当に順番があるので番号を使う） */
+/* 謇矩・・騾ｲ縺ｿ蜈ｷ蜷茨ｼ域悽蠖薙↓鬆・分縺後≠繧九・縺ｧ逡ｪ蜿ｷ繧剃ｽｿ縺・ｼ・*/
 .steps {
   display: flex;
   gap: 6px;
@@ -235,7 +231,7 @@ body {
 .step.skip { opacity: 0.5; }
 .step:focus-visible { outline: 3px solid var(--green-soft); outline-offset: 1px; }
 
-/* はじめての案内 */
+/* 縺ｯ縺倥ａ縺ｦ縺ｮ譯亥・ */
 .welcome {
   display: flex;
   gap: 12px;
@@ -251,7 +247,7 @@ body {
 .welcome p { margin: 0; flex: 1; }
 .welcome strong { color: var(--green-deep); }
 
-/* セクション：白いカードを並べる */
+/* 繧ｻ繧ｯ繧ｷ繝ｧ繝ｳ・夂區縺・き繝ｼ繝峨ｒ荳ｦ縺ｹ繧・*/
 section.card {
   padding: 16px 16px 18px;
   margin-bottom: 12px;
@@ -291,7 +287,7 @@ section.card.skip .card-head h2 { color: var(--muted); }
 .hint { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
 .hint.top { margin: -4px 0 10px; }
 
-/* フォーム */
+/* 繝輔か繝ｼ繝 */
 .field { display: block; margin: 0 0 10px; }
 .field > span {
   display: block;
@@ -306,7 +302,7 @@ input[type=text], input[type=url], input[type=tel], input[type=number], input[ty
   width: 100%;
   padding: 10px 14px;
   font: inherit;
-  font-size: 16px;               /* iOS でズームしないための下限 */
+  font-size: 16px;               /* iOS 縺ｧ繧ｺ繝ｼ繝縺励↑縺・◆繧√・荳矩剞 */
   color: var(--ink);
   background: var(--ground);
   border: 2px solid transparent;
@@ -327,7 +323,7 @@ input[inputmode=numeric], input[type=number], input[type=time] { font-variant-nu
 .indent { margin: 0 0 10px 30px; }
 .indent .grid-2 { margin-top: 4px; }
 
-/* 選択肢（ラジオ・チェック） */
+/* 驕ｸ謚櫁い・医Λ繧ｸ繧ｪ繝ｻ繝√ぉ繝・け・・*/
 .choice {
   display: flex;
   align-items: flex-start;
@@ -348,7 +344,7 @@ input[inputmode=numeric], input[type=number], input[type=time] { font-variant-nu
 .choice .body { flex: 1; min-width: 0; font-weight: 700; }
 .choice .body small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; font-weight: 500; }
 
-/* 運行形態：図つきの4択 */
+/* 驕玖｡悟ｽ｢諷具ｼ壼峙縺､縺阪・4謚・*/
 .patterns { display: grid; gap: 8px; }
 .pattern {
   display: grid;
@@ -374,7 +370,7 @@ input[inputmode=numeric], input[type=number], input[type=time] { font-variant-nu
 .pattern .a { fill: none; stroke: var(--ink-2); stroke-width: 2; stroke-linecap: round; }
 .pattern .ah { fill: var(--ink-2); }
 
-/* 地図で置くものの状態表示 */
+/* 蝨ｰ蝗ｳ縺ｧ鄂ｮ縺上ｂ縺ｮ縺ｮ迥ｶ諷玖｡ｨ遉ｺ */
 .map-status {
   display: flex;
   flex-wrap: wrap;
@@ -390,7 +386,7 @@ input[inputmode=numeric], input[type=number], input[type=time] { font-variant-nu
 .map-status .grow { flex: 1; min-width: 120px; }
 .map-status .count { font-weight: 700; font-variant-numeric: tabular-nums; }
 
-/* 乗降場所の一覧 */
+/* 荵鈴剄蝣ｴ謇縺ｮ荳隕ｧ */
 ul.stops { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
 ul.stops li {
   display: grid;
@@ -416,7 +412,7 @@ ul.stops li small {
 }
 ul.stops:empty { display: none; }
 
-/* 曜日 */
+/* 譖懈律 */
 .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-bottom: 10px; }
 .day {
   position: relative;
@@ -438,7 +434,7 @@ ul.stops:empty { display: none; }
 .day.sat:not(:has(input:checked)) { color: var(--stop); }
 .day.sun:not(:has(input:checked)) { color: var(--ng); }
 
-/* 時間帯 */
+/* 譎る俣蟶ｯ */
 ul.windows { list-style: none; padding: 0; margin: 6px 0 10px; display: grid; gap: 6px; }
 ul.windows li { display: flex; align-items: center; gap: 8px; }
 ul.windows li .trip {
@@ -449,7 +445,7 @@ ul.windows li .trip {
 ul.windows li input[type=time] { flex: 1; min-width: 0; padding: 8px 12px; }
 ul.windows li .tilde { color: var(--muted); }
 
-/* ボタン */
+/* 繝懊ち繝ｳ */
 button {
   font: inherit;
   font-size: 14px;
@@ -490,7 +486,7 @@ button.x {
 button.x:hover { color: var(--ng); background: var(--ng-soft); transform: none; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
-/* 検証結果 */
+/* 讀懆ｨｼ邨先棡 */
 .result { margin-top: 12px; }
 .result .ok {
   display: flex; gap: 10px; align-items: flex-start;
@@ -528,7 +524,7 @@ button.x:hover { color: var(--ng); background: var(--ng-soft); transform: none; 
 }
 .note a { color: var(--green-deep); font-weight: 700; }
 
-/* 下に固定する操作バー */
+/* 荳九↓蝗ｺ螳壹☆繧区桃菴懊ヰ繝ｼ */
 .actionbar {
   position: sticky;
   bottom: 0;
@@ -547,7 +543,7 @@ button.x:hover { color: var(--ng); background: var(--ng-soft); transform: none; 
 .actionbar .status.ng { color: var(--ng); font-weight: 700; }
 .actionbar button, .actionbar a.btn { flex: none; }
 .actionbar button.primary { padding-inline: 18px; }
-/* ボタンに見せるリンク（新しいタブで開きたい操作。window.open はブロックされる環境がある） */
+/* 繝懊ち繝ｳ縺ｫ隕九○繧九Μ繝ｳ繧ｯ・域眠縺励＞繧ｿ繝悶〒髢九″縺溘＞謫堺ｽ懊Ｘindow.open 縺ｯ繝悶Ο繝・け縺輔ｌ繧狗腸蠅・′縺ゅｋ・・*/
 a.btn {
   display: inline-block;
   font-size: 14px;
@@ -569,7 +565,7 @@ a.btn:focus-visible { outline: 3px solid var(--green-soft); outline-offset: 1px;
   .actionbar button, .actionbar a.btn { flex: 1; }
 }
 
-/* ── オープニング画面 ─────────────────────── */
+/* 笏笏 繧ｪ繝ｼ繝励ル繝ｳ繧ｰ逕ｻ髱｢ 笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏笏 */
 body.intro-open { overflow: hidden; }
 .intro {
   position: fixed;
@@ -673,8 +669,8 @@ body.intro-open { overflow: hidden; }
   .intro { place-items: start center; }
 }
 
-/* ── 住民向け確認ページ（check.html）───────────────
-   高齢の方が読める文字の大きさと言葉で。作成画面より一回り大きく。 */
+/* 笏笏 菴乗ｰ大髄縺醍｢ｺ隱阪・繝ｼ繧ｸ・・heck.html・俄楳笏笏笏笏笏笏笏笏笏笏笏笏笏笏
+   鬮倬ｽ｢縺ｮ譁ｹ縺瑚ｪｭ繧√ｋ譁・ｭ励・螟ｧ縺阪＆縺ｨ險闡峨〒縲ゆｽ懈・逕ｻ髱｢繧医ｊ荳蝗槭ｊ螟ｧ縺阪￥縲・*/
 
 .check-layout {
   display: grid;
@@ -783,18 +779,16 @@ body.intro-open { overflow: hidden; }
   font-weight: 700;
 }
 
-/* ── 複数エリア・運休日・便ごとの締切（2026-10-03 追加）────── */
+/* 笏笏 隍・焚繧ｨ繝ｪ繧｢繝ｻ驕倶ｼ第律繝ｻ萓ｿ縺斐→縺ｮ邱蛻・ｼ・026-10-03 霑ｽ蜉・俄楳笏笏笏笏笏 */
 
 .area-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
   margin: 14px 0 4px;
   padding-top: 12px;
   border-top: 1px dashed var(--line);
 }
+.area-bar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .area-bar-label { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.area-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
 .area-chip {
   font-size: 13px;
   padding: 6px 14px;

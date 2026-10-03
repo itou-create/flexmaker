@@ -54,6 +54,17 @@ export function fitToService(): void {
   else if (pts.length === 1) map.setView(pts[0], 14)
 }
 
+/** 全エリアが入るように寄せる（「全体を見る」ボタン） */
+export function fitToAll(): void {
+  const pts: L.LatLngExpression[] = []
+  for (const a of getState().service.areas) {
+    if (a.zone) for (const [lng, lat] of a.zone.polygon) pts.push([lat, lng])
+    for (const st of a.stops) pts.push([st.lat, st.lon])
+  }
+  if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [24, 24] })
+  else if (pts.length === 1) map.setView(pts[0], 14)
+}
+
 function render(): void {
   const s = getState()
   const a = activeArea()

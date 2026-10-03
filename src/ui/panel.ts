@@ -12,7 +12,7 @@ import { savePreview } from '../preview'
 import { getState, setState, subscribe, updateArea, updateService } from '../state'
 import { areaColor } from '../areaColors'
 import { PATTERN_LABEL, type Agency, type DemandArea, type OperationPattern, type ValidationIssue } from '../types'
-import { fitToService } from './map'
+import { fitToAll, fitToService } from './map'
 import { LOGO_SVG, showIntro } from './intro'
 
 const DAY_LABEL = ['月', '火', '水', '木', '金', '土', '日']
@@ -179,15 +179,20 @@ function render(): void {
       <label class="field"><span>電話番号</span><input id="agency-phone" name="agency.phone" type="tel" value="${esc(sv.agency.phone)}" placeholder="0000-00-0000"></label>
     </div>
 
-    <div class="area-bar" role="tablist" aria-label="運行エリア">
-      <span class="area-bar-label">エリア</span>
-      ${sv.areas
-        .map(
-          (x, i) =>
-            `<button type="button" role="tab" aria-selected="${i === ai}" class="area-chip ${i === ai ? 'active' : ''}" data-act="area-select" data-i="${i}"><span class="area-dot" style="background:${areaColor(i)}"></span>${esc(x.routeName || `エリア${i + 1}`)}</button>`,
-        )
-        .join('')}
-      <button type="button" class="area-chip add" data-act="area-add">＋エリアを足す</button>
+    <div class="area-bar">
+      <div class="area-bar-head">
+        <span class="area-bar-label">エリア</span>
+        ${sv.areas.length > 1 ? `<button type="button" data-act="area-fit-all" class="link">全体を見る</button>` : ''}
+      </div>
+      <div class="area-chips" role="tablist" aria-label="運行エリア">
+        ${sv.areas
+          .map(
+            (x, i) =>
+              `<button type="button" role="tab" aria-selected="${i === ai}" class="area-chip ${i === ai ? 'active' : ''}" data-act="area-select" data-i="${i}"><span class="area-dot" style="background:${areaColor(i)}"></span>${esc(x.routeName || `エリア${i + 1}`)}</button>`,
+          )
+          .join('')}
+        <button type="button" class="area-chip add" data-act="area-add">＋エリアを足す</button>
+      </div>
     </div>
     <p class="hint">「滝根地区」「南部線」のように、運行エリア（路線）ごとに分けて入力します。1つだけでも構いません。</p>
 
@@ -544,6 +549,10 @@ function onClick(e: Event): void {
     case 'area-select':
       setState({ activeArea: Number(btn.dataset.i), mapMode: 'none', draftPolygon: [] })
       fitToService()
+      break
+    case 'area-fit-all':
+      fitToAll()
+      scrollToMapOnPhone()
       break
     case 'area-add':
       setState((s) => ({

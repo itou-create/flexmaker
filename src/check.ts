@@ -356,7 +356,7 @@ function renderPanel(): void {
             (x, i) =>
               `<button type="button" class="check-area-chip ${x === area ? 'active' : ''}" data-area="${i}" ${x === area ? `style="border-color:${areaColor(i)}"` : ''}><span class="area-dot" style="background:${areaColor(i)}"></span>${esc(x.name || `エリア${i + 1}`)}</button>`,
           )
-          .join('')}</div>`
+          .join('')}<button type="button" class="check-area-chip" data-area-fit-all>全体を見る</button></div>`
       : ''
 
   // いま予約できるかの目安（この端末の時計で判定）
@@ -419,9 +419,14 @@ async function main(): Promise<void> {
   renderMap()
   renderPanel()
 
-  // エリア切り替え（エリアが複数あるときだけチップが出る）
+  // エリア切り替え・全体表示（エリアが複数あるときだけチップが出る）
   panel.addEventListener('click', (ev) => {
-    const btn = (ev.target as HTMLElement).closest<HTMLElement>('[data-area]')
+    const t = ev.target as HTMLElement
+    if (t.closest('[data-area-fit-all]')) {
+      fitAll()
+      return
+    }
+    const btn = t.closest<HTMLElement>('[data-area]')
     if (!btn) return
     area = data.view.areas[Number(btn.dataset.area)]
     renderMap()
@@ -437,20 +442,34 @@ async function main(): Promise<void> {
     map.invalidateSize()
     if (!fitted && map.getSize().y > 0) {
       fitted = true
-      fitArea()
+      // エリアが複数あれば、まず全体（色分け）を見せる
+      if (data.view.areas.length > 1) fitAll()
+      else fitArea()
     }
   }
   new ResizeObserver(tryFit).observe(document.getElementById('map')!)
   tryFit()
 }
 
-/** 編集中のエリアの乗り場と区域の全体が入るように寄せる */
-function fitArea(): void {
-  const pts: L.LatLngExpression[] = [...area.board.stops, ...area.alight.stops].map((st) => [st.lat, st.lon])
-  for (const z of [...area.board.zones, ...area.alight.zones])
+function ptsOf(a: ViewArea): L.LatLngExpression[] {
+  const pts: L.LatLngExpression[] = [...a.board.stops, ...a.alight.stops].map((st) => [st.lat, st.lon])
+  for (const z of [...a.board.zones, ...a.alight.zones])
     for (const ring of z.rings) for (const [lng, lat] of ring) pts.push([lat, lng])
+  return pts
+}
+
+/** 見ているエリアの乗り場と区域の全体が入るように寄せる */
+function fitArea(): void {
+  const pts = ptsOf(area)
   if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [20, 20], animate: false })
   else map.setView([35.77, 139.35], 13, { animate: false })
+}
+
+/** 全エリアが入るように寄せる（「全体を見る」） */
+function fitAll(): void {
+  const pts = data.view.areas.flatMap(ptsOf)
+  if (pts.length >= 2) map.fitBounds(L.latLngBounds(pts), { padding: [20, 20], animate: false })
+  else fitArea()
 }
 
 void main()
