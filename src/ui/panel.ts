@@ -10,6 +10,7 @@ import { validateFlexFiles } from '../gtfs/validate'
 import { buildZip, downloadBytes } from '../gtfs/zip'
 import { savePreview } from '../preview'
 import { getState, setState, subscribe, updateArea, updateService } from '../state'
+import { areaColor } from '../areaColors'
 import { PATTERN_LABEL, type Agency, type DemandArea, type OperationPattern, type ValidationIssue } from '../types'
 import { fitToService } from './map'
 import { LOGO_SVG, showIntro } from './intro'
@@ -183,7 +184,7 @@ function render(): void {
       ${sv.areas
         .map(
           (x, i) =>
-            `<button type="button" role="tab" aria-selected="${i === ai}" class="area-chip ${i === ai ? 'active' : ''}" data-act="area-select" data-i="${i}">${esc(x.routeName || `エリア${i + 1}`)}</button>`,
+            `<button type="button" role="tab" aria-selected="${i === ai}" class="area-chip ${i === ai ? 'active' : ''}" data-act="area-select" data-i="${i}"><span class="area-dot" style="background:${areaColor(i)}"></span>${esc(x.routeName || `エリア${i + 1}`)}</button>`,
         )
         .join('')}
       <button type="button" class="area-chip add" data-act="area-add">＋エリアを足す</button>

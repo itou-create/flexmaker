@@ -5,10 +5,11 @@
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { activeArea, getState, setState, subscribe, updateArea } from '../state'
+import { areaColor } from '../areaColors'
 import type { Stop } from '../types'
 
 let map: L.Map
-let zoneLayer: L.Polygon | null = null
+let zoneLayers = L.layerGroup()
 let draftLayer: L.Polyline | null = null
 let draftVertices: L.CircleMarker[] = []
 let stopLayer = L.layerGroup()
@@ -19,6 +20,7 @@ export function mountMap(el: HTMLElement): void {
     attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">地理院タイル</a>',
     maxZoom: 18,
   }).addTo(map)
+  zoneLayers.addTo(map)
   stopLayer.addTo(map)
 
   map.on('click', (e: L.LeafletMouseEvent) => {
@@ -56,16 +58,20 @@ function render(): void {
   const s = getState()
   const a = activeArea()
 
-  // 確定した区域（編集中のエリアのもの）
-  if (zoneLayer) zoneLayer.remove()
-  zoneLayer = null
-  if (a.zone && a.zone.polygon.length >= 3) {
-    zoneLayer = L.polygon(
-      a.zone.polygon.map(([lng, lat]) => [lat, lng] as L.LatLngExpression),
-      { color: '#34a06a', weight: 3, fillOpacity: 0.16 },
-    ).addTo(map)
-    zoneLayer.bindTooltip(a.zone.name, { permanent: false })
-  }
+  // 区域は全エリア分を色分けで描く（全体が見える）。編集中のエリアだけ濃く、他は薄く点線で
+  zoneLayers.clearLayers()
+  s.service.areas.forEach((area, i) => {
+    if (!area.zone || area.zone.polygon.length < 3) return
+    const active = i === s.activeArea
+    L.polygon(
+      area.zone.polygon.map(([lng, lat]) => [lat, lng] as L.LatLngExpression),
+      active
+        ? { color: areaColor(i), weight: 3, fillOpacity: 0.16 }
+        : { color: areaColor(i), weight: 1.5, dashArray: '4 5', fillOpacity: 0.05 },
+    )
+      .bindTooltip(area.routeName || area.zone.name, { permanent: false })
+      .addTo(zoneLayers)
+  })
 
   // 描画途中の区域
   if (draftLayer) draftLayer.remove()

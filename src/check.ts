@@ -12,6 +12,7 @@ import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { FlexView, ViewArea, ViewStop } from './gtfs/flexReader.ts'
 import { loadPreview } from './preview'
+import { areaColor } from './areaColors'
 
 interface DemoSource {
   municipality: string
@@ -77,6 +78,80 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
+// ── 「いま予約できる？」の判定 ────────────────────
+// この端末の時計で、きょうこのエリアが走っているか・いまから予約が間に合うかを判定する。
+// あくまで目安（受付電話の営業時間までは GTFS に無い）。最終確認は電話で。
+
+const pad2 = (n: number): string => String(n).padStart(2, '0')
+const ymdOf = (d: Date): string => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`
+const minOf = (t: string): number => {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t)
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 0
+}
+const fmtMin = (m: number): string => `${Math.floor(m / 60)}:${pad2(m % 60)}`
+
+function runsOn(a: ViewArea, d: Date): boolean {
+  const ymd = ymdOf(d)
+  if (a.extraDates.includes(ymd)) return true
+  if (a.closedDates.includes(ymd)) return false
+  if (a.dateRange && a.dateRange.start.length === 8 && (ymd < a.dateRange.start || ymd > a.dateRange.end)) return false
+  return a.days[(d.getDay() + 6) % 7]
+}
+
+interface NowStatus {
+  cls: 'ok' | 'warn' | 'off'
+  title: string
+  detail: string
+}
+
+function bookingNow(a: ViewArea, now: Date): NowStatus {
+  if (!runsOn(a, now)) {
+    let next: Date | null = null
+    for (let i = 1; i <= 14; i++) {
+      const d = new Date(now)
+      d.setDate(d.getDate() + i)
+      if (runsOn(a, d)) {
+        next = d
+        break
+      }
+    }
+    const nextTxt = next ? `次に走るのは ${next.getMonth() + 1}月${next.getDate()}日（${'日月火水木金土'[next.getDay()]}）です。` : ''
+    return { cls: 'off', title: 'きょうは走っていません', detail: nextTxt }
+  }
+
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  for (const w of a.windows) {
+    const r = w.booking ?? a.booking
+    const end = minOf(w.end)
+    if (!r) continue
+    if (r.type === 0 && nowMin < end) {
+      return { cls: 'ok', title: 'いま呼べます', detail: `きょうは ${w.end} まで走っています。予約なしで電話してください。` }
+    }
+    if (r.type === 1) {
+      const need = r.durationMin ?? 0
+      if (nowMin + need <= end) {
+        const earliest = Math.max(nowMin + need, minOf(w.start))
+        return {
+          cls: 'ok',
+          title: 'いま予約できます',
+          detail: `いま電話すると、早ければ ${fmtMin(earliest)} ごろに乗れます（きょうの運行は ${w.end} まで）。`,
+        }
+      }
+    }
+  }
+
+  // きょうの便にはもう乗れない。前日締切型なら、あすの便の締切を案内する
+  const r2 = [...a.windows.map((w) => w.booking), a.booking].find((r) => r?.type === 2)
+  if (r2?.lastTime) {
+    const dayWord = (r2.lastDay ?? 1) === 1 ? 'あすの便' : `${r2.lastDay}日後の便`
+    if (nowMin < minOf(r2.lastTime)) {
+      return { cls: 'warn', title: 'きょうの便は予約できません', detail: `${dayWord}は、きょう ${r2.lastTime} までに電話で予約してください。` }
+    }
+    return { cls: 'warn', title: 'きょうの受付は終わりました', detail: `予約の締切は利用日の前日 ${r2.lastTime} です。` }
+  }
+  return { cls: 'warn', title: 'きょうの受付は終わりました', detail: 'あすの便の予約は、電話でご確認ください。' }
+}
+
 // ── 画面 ──────────────────────────────────────
 
 const app = document.getElementById('app')!
@@ -116,6 +191,12 @@ function mountMap(): void {
   stopLayer.addTo(map)
   map.on('click', (e: L.LeafletMouseEvent) => {
     picked = { lat: e.latlng.lat, lon: e.latlng.lng }
+    // 押した場所が別のエリアの区域の中なら、そのエリアに切り替える
+    // （住民はエリアの境目を知らないので、地図に任せる）
+    const hit = data.view.areas.find((x) =>
+      [...x.board.zones, ...x.alight.zones].some((z) => insideZone(picked!.lat, picked!.lon, z.rings)),
+    )
+    if (hit && hit !== area) area = hit
     renderMap()
     renderPanel()
     document.getElementById('map-hint')?.setAttribute('hidden', '')
@@ -131,12 +212,20 @@ function nearestStops(lat: number, lon: number, stops: ViewStop[], n: number): {
 
 function renderMap(): void {
   stopLayer.clearLayers()
-  for (const z of [...area.board.zones, ...area.alight.zones]) {
-    L.polygon(
-      z.rings.map((ring) => ring.map(([lng, lat]) => [lat, lng] as L.LatLngExpression)),
-      { color: '#34a06a', weight: 3, fillOpacity: 0.14 },
-    ).addTo(stopLayer)
-  }
+  // 区域は全エリア分を色分けで描く（全体が見える）。見ているエリアだけ濃く、他は薄く点線で
+  data.view.areas.forEach((x, i) => {
+    const active = x === area
+    for (const z of [...x.board.zones, ...x.alight.zones]) {
+      L.polygon(
+        z.rings.map((ring) => ring.map(([lng, lat]) => [lat, lng] as L.LatLngExpression)),
+        active
+          ? { color: areaColor(i), weight: 3, fillOpacity: 0.14 }
+          : { color: areaColor(i), weight: 1.5, dashArray: '4 5', fillOpacity: 0.05 },
+      )
+        .bindTooltip(x.name || z.name)
+        .addTo(stopLayer)
+    }
+  })
   const mapStops = [...area.board.stops]
   for (const st of area.alight.stops) if (!mapStops.some((x) => x.id === st.id)) mapStops.push(st)
   for (const st of mapStops) {
@@ -259,20 +348,31 @@ function renderPanel(): void {
       <p>これは作成画面で入力中のデータのプレビューです。保存も公開もされていません。内容を直すときは、作成画面のタブに戻ってください。</p>
     </footer>`
 
-  // エリア（路線）が複数あるときは、見るエリアを切り替えられるようにする
+  // エリア（路線）が複数あるときは、色分けの凡例を兼ねたチップで切り替えられるようにする
   const areaChips =
     data.view.areas.length > 1
       ? `<div class="check-areas">${data.view.areas
           .map(
             (x, i) =>
-              `<button type="button" class="check-area-chip ${x === area ? 'active' : ''}" data-area="${i}">${esc(x.name || `エリア${i + 1}`)}</button>`,
+              `<button type="button" class="check-area-chip ${x === area ? 'active' : ''}" data-area="${i}" ${x === area ? `style="border-color:${areaColor(i)}"` : ''}><span class="area-dot" style="background:${areaColor(i)}"></span>${esc(x.name || `エリア${i + 1}`)}</button>`,
           )
           .join('')}</div>`
       : ''
 
+  // いま予約できるかの目安（この端末の時計で判定）
+  const now = new Date()
+  const ns = bookingNow(area, now)
+  const nowCard = `<section class="check-card">
+    <h2>いま予約できる？</h2>
+    <p class="check-big ${ns.cls === 'ok' ? 'check-yes' : ns.cls === 'warn' ? 'check-no' : ''}"><b>${esc(ns.title)}</b></p>
+    ${ns.detail ? `<p>${esc(ns.detail)}</p>` : ''}
+    <p class="check-small">${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')} 時点の目安です。確かなことは電話でご確認ください。</p>
+  </section>`
+
   panel.innerHTML = `
     ${s ? '' : '<div class="check-preview-band">プレビュー — 作成中のデータを表示しています</div>'}
     ${areaChips}
+    ${nowCard}
     ${pickedCard()}
     <section class="check-card">
       <h2>いつ走っている？</h2>

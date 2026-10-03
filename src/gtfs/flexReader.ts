@@ -56,8 +56,8 @@ export interface ViewArea {
   name: string
   board: ViewPlaces
   alight: ViewPlaces
-  /** "9:00"〜"17:00" 形式。便（時間帯）ごとに1つ */
-  windows: { start: string; end: string }[]
+  /** "9:00"〜"17:00" 形式。便（時間帯）ごとに1つ。booking はその便の予約ルール */
+  windows: { start: string; end: string; booking?: ViewBooking }[]
   /** 月〜日 */
   days: [boolean, boolean, boolean, boolean, boolean, boolean, boolean]
   /** YYYYMMDD */
@@ -265,7 +265,11 @@ export function readFlexFiles(files: Record<string, string>): FlexView {
         bookingSpans.set(info.routeId, spans)
       }
       if (start && end) {
-        const w = { start: toDisplayTime(start), end: toDisplayTime(end) }
+        const w = {
+          start: toDisplayTime(start),
+          end: toDisplayTime(end),
+          booking: bookingId ? bookings.get(bookingId) : undefined,
+        }
         if (!area.windows.some((x) => x.start === w.start && x.end === w.end)) area.windows.push(w)
       }
     }
