@@ -9,7 +9,7 @@
 // ※自前の QR 生成に置き換えるのは今後の課題（CLAUDE.md）
 
 import './styles.css'
-import type { FlexView, ViewArea } from './gtfs/flexReader.ts'
+import { normalizeView, type FlexView, type ViewArea } from './gtfs/flexReader.ts'
 import { loadPreview } from './preview'
 import { areaColor } from './areaColors'
 import { bookingText, daysText, windowsText } from './viewText'
@@ -160,7 +160,7 @@ async function main(): Promise<void> {
       app.innerHTML = `<div class="flyer-toolbar"><p>チラシにするデータが見つかりません。作成画面から開き直してください。</p></div>`
       return
     }
-    data = { view: p.view }
+    data = { view: normalizeView(p.view) }
   } else {
     const res = await fetch('./data/mizuho_town_mizuho_area.json')
     if (!res.ok) {
@@ -168,6 +168,7 @@ async function main(): Promise<void> {
       return
     }
     data = (await res.json()) as DemoData
+    data.view = normalizeView(data.view)
   }
 
   document.title = `チラシ印刷 — ${data.source?.serviceName ?? data.view.areas[0]?.name ?? 'デマンド交通'}`

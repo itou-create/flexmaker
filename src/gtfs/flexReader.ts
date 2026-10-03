@@ -80,6 +80,22 @@ export interface FlexView {
   areas: ViewArea[]
 }
 
+/**
+ * 外から来た FlexView（同梱JSON・localStorage のプレビュー）に、後から増えた
+ * フィールドの既定値を埋める。古いデータを読んでもページが落ちないようにする。
+ */
+export function normalizeView(v: FlexView): FlexView {
+  for (const a of v.areas ?? []) {
+    a.otherBookings ??= []
+    a.closedDates ??= []
+    a.extraDates ??= []
+    a.windows ??= []
+    a.board ??= { stops: [], zones: [] }
+    a.alight ??= { stops: [], zones: [] }
+  }
+  return v
+}
+
 /** "9:00:00" / "09:00:00" / "9:00" → "9:00"（表示用。先頭の 0 は付けない） */
 export function toDisplayTime(t: string): string {
   const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(t.trim())

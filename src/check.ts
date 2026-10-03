@@ -10,7 +10,7 @@
 import './styles.css'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { FlexView, ViewArea, ViewStop } from './gtfs/flexReader.ts'
+import { normalizeView, type FlexView, type ViewArea, type ViewStop } from './gtfs/flexReader.ts'
 import { loadPreview } from './preview'
 import { areaColor } from './areaColors'
 import { bookingText, daysText, windowsText } from './viewText'
@@ -383,8 +383,8 @@ async function main(): Promise<void> {
       </section>`
       return
     }
-    data = { view: p.view }
-    area = p.view.areas[0]
+    data = { view: normalizeView(p.view) }
+    area = data.view.areas[0]
     const name = area.name || '作成中のサービス'
     sub.textContent = `${p.view.agencyName ? p.view.agencyName + ' ' : ''}「${name}」のプレビュー`
     document.title = `うちから乗れる？ — ${name}（プレビュー）`
@@ -395,6 +395,7 @@ async function main(): Promise<void> {
       return
     }
     data = (await res.json()) as DemoData
+    data.view = normalizeView(data.view)
     area = data.view.areas[0]
     sub.textContent = `${data.source!.municipality}「${data.source!.serviceName}」`
     document.title = `うちから乗れる？ — ${data.source!.serviceName}`

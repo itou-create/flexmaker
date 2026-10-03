@@ -6,7 +6,7 @@
   "datasetUrl": "https://ckan.odpt.org/dataset/mizuho_town_mizuho_area",
   "license": "CC BY 4.0",
   "licenseUrl": "https://creativecommons.org/licenses/by/4.0/deed.ja",
-  "fetchedOn": "2026-09-26",
+  "fetchedOn": "2026-10-03",
   "feedVersion": "20261001"
  },
  "view": {
@@ -1531,7 +1531,14 @@
     "windows": [
      {
       "start": "9:00",
-      "end": "17:00"
+      "end": "17:00",
+      "booking": {
+       "type": 1,
+       "durationMin": 30,
+       "message": "ご利用の30分前までに予約が必要で、電話予約は8:30から16:30まで、オンライン予約は24時間受付",
+       "phone": "050-2030-2630",
+       "infoUrl": "https://www.town.mizuho.tokyo.jp/"
+      }
      }
     ],
     "days": [
@@ -1565,7 +1572,8 @@
      "message": "ご利用の30分前までに予約が必要で、電話予約は8:30から16:30まで、オンライン予約は24時間受付",
      "phone": "050-2030-2630",
      "infoUrl": "https://www.town.mizuho.tokyo.jp/"
-    }
+    },
+    "otherBookings": []
    }
   ]
  }
