@@ -14,6 +14,7 @@ import { readFlexFiles } from './gtfs/flexReader.ts'
 import { buildZip, downloadBytes } from './gtfs/zip'
 import { savePreview } from './preview'
 import { areaColor } from './areaColors'
+import { getGoogleMapsKey, setGoogleMapsKey } from './mapsKey'
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -62,6 +63,7 @@ function render(): void {
           <a class="btn" href="./">編集を続ける</a>
           <a class="btn" href="check.html#preview" target="_blank" rel="noopener" data-act="preview">住民ページで見る</a>
           <a class="btn" href="flyer.html#preview" target="_blank" rel="noopener" data-act="preview">チラシを印刷</a>
+          <a class="btn" href="signage.html#preview" target="_blank" rel="noopener" data-act="preview">サイネージ表示</a>
           <button type="button" class="secondary" data-act="zip">zip を出す</button>
           <button type="button" class="secondary small" data-act="reset">白紙に戻す</button>
         </div>`
@@ -80,6 +82,19 @@ function render(): void {
       <h2>あなたの作成データ</h2>
       ${myData}
       <p class="check-small">データはこの端末の中にだけあります（サーバには送られていません）。</p>
+    </section>
+
+    <section class="mp-card">
+      <h2>Google マップ連携</h2>
+      <p>お手持ちの Google Maps API キーをこの端末に保存すると、チラシとサイネージの地図が Google マップになります
+      （未設定・読み込み失敗時は地理院地図）。キーは<b>この端末にだけ</b>保存され、サーバやリポジトリには入りません。</p>
+      <div class="mp-actions">
+        <input type="password" id="gmaps-key" class="mp-key-input" placeholder="AIza…" autocomplete="off">
+        <button type="button" class="secondary" data-act="gkey-save">保存</button>
+        ${getGoogleMapsKey() ? '<button type="button" class="secondary small" data-act="gkey-clear">削除</button>' : ''}
+      </div>
+      <p class="check-small">状態：${getGoogleMapsKey() ? '設定済み ✓（Google マップで表示）' : '未設定（地理院地図で表示中）'}
+      ／ キー側では Maps Static API の有効化と HTTP リファラー制限をお忘れなく</p>
     </section>
 
     <section class="mp-card mp-mock">
@@ -153,6 +168,20 @@ app.addEventListener('click', (e) => {
       render()
       break
     }
+    case 'gkey-save': {
+      const input = document.getElementById('gmaps-key') as HTMLInputElement | null
+      if (!input) return
+      if (!setGoogleMapsKey(input.value)) {
+        window.alert('キーの形式が違うようです（AIza で始まる39文字）。')
+        return
+      }
+      render()
+      break
+    }
+    case 'gkey-clear':
+      setGoogleMapsKey('')
+      render()
+      break
     case 'mock':
       window.alert('この機能はサーバ導入後の構想サンプルです（まだ動きません）。')
       break

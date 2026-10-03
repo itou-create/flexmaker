@@ -22,6 +22,7 @@ export default defineConfig({
         check: fileURLToPath(new URL('./check.html', import.meta.url)),
         flyer: fileURLToPath(new URL('./flyer.html', import.meta.url)),
         mypage: fileURLToPath(new URL('./mypage.html', import.meta.url)),
+        signage: fileURLToPath(new URL('./signage.html', import.meta.url)),
       },
     },
   },

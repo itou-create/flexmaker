@@ -13,6 +13,8 @@ import { normalizeView, type FlexView, type ViewArea } from './gtfs/flexReader.t
 import { loadPreview } from './preview'
 import { areaColor } from './areaColors'
 import { bookingText, daysText, windowsText } from './viewText'
+import { getGoogleMapsKey } from './mapsKey'
+import { staticMapUrl } from './googleStatic'
 
 const PAGE_URL = 'https://itou-create.github.io/flexmaker/check.html'
 
@@ -92,11 +94,19 @@ function mapBlock(a: ViewArea, colorIndex: number): string {
     .map((st) => `<circle cx="${sx(st.lon)}" cy="${sy(st.lat)}" r="3.2" fill="#fff" stroke="${color}" stroke-width="1.8"/>`)
     .join('')
 
+  // Google マップのキーがこの端末にあれば、Google の静的地図を上に重ねる
+  // （読み込めなければ外れて、下の地理院タイルがそのまま見える）
+  const gkey = getGoogleMapsKey()
+  const gimg = gkey
+    ? `<img class="flyer-gimg" src="${staticMapUrl(a, colorIndex, W, H, gkey)}" alt="" onerror="this.remove()">`
+    : ''
+
   return `<div class="flyer-tilemap" style="width:${W}px;height:${H}px" role="img" aria-label="運行範囲の地図">
     ${tiles.join('')}
     <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${zonePaths}${stopDots}</svg>
-  </div>
-  <p class="flyer-map-credit">地図：国土地理院（地理院タイル・淡色地図）</p>`
+    <span class="flyer-tilemap-credit">地図：国土地理院（地理院タイル）</span>
+    ${gimg}
+  </div>`
 }
 
 function flyerHtml(a: ViewArea, i: number, data: DemoData): string {

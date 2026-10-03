@@ -1033,3 +1033,66 @@ a.link-a:hover { background: var(--green-tint); }
 .flyer-tilemap img { position: absolute; width: 256px; height: 256px; }
 .flyer-tilemap svg { position: absolute; left: 0; top: 0; }
 .flyer-map-credit { font-size: 10.5px; color: #7d9184; margin: 4px 0 0; text-align: right; }
+
+/* ── サイネージ表示（signage.html）────────────── */
+
+.sg {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--ground);
+  padding: 3vmin 4vmin;
+  box-sizing: border-box;
+}
+.sg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.sg-title { font-size: 4.5vmin; font-weight: 700; color: var(--green-deep); }
+.sg-clock { font-size: 5vmin; font-weight: 700; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sg-area {
+  flex: 1;
+  margin-top: 2vmin;
+  background: var(--surface);
+  border: 1vmin solid var(--green);
+  border-radius: 24px;
+  padding: 4vmin 5vmin;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2vmin;
+  box-shadow: var(--shadow-card);
+}
+.sg-area-name { font-size: 4.2vmin; font-weight: 700; }
+.sg-area-name .area-dot { width: 2.4vmin; height: 2.4vmin; margin-right: 1.4vmin; }
+.sg-status { font-size: 8.5vmin; font-weight: 700; line-height: 1.25; }
+.sg-status.ok { color: var(--ok); }
+.sg-status.warn { color: var(--warn); }
+.sg-status.off { color: var(--muted); }
+.sg-detail { font-size: 3.6vmin; line-height: 1.6; }
+.sg-row { display: flex; gap: 4vmin; align-items: stretch; flex-wrap: wrap; margin-top: 1vmin; }
+.sg-days { font-size: 3.2vmin; line-height: 1.6; flex: 1; min-width: 30vmin; align-self: center; }
+.sg-phone {
+  background: var(--green-tint);
+  border: 0.6vmin solid var(--green);
+  border-radius: 20px;
+  padding: 2vmin 4vmin;
+  text-align: center;
+}
+.sg-phone span { display: block; font-size: 2.6vmin; font-weight: 700; color: var(--green-deep); }
+.sg-phone strong { font-size: 7vmin; letter-spacing: 0.04em; color: var(--green-deep); font-variant-numeric: tabular-nums; }
+.sg-foot { display: flex; align-items: center; gap: 3vmin; margin-top: 2vmin; }
+.sg-dots { display: flex; gap: 1.2vmin; }
+.sg-dots span { width: 1.6vmin; height: 1.6vmin; border-radius: 50%; background: var(--line-strong); }
+.sg-dots span.on { background: var(--green); }
+.sg-note { flex: 1; font-size: 1.9vmin; color: var(--muted); }
+#sg-full { font-size: 1.9vmin; padding: 0.8vmin 2vmin; }
+
+.mp-key-input {
+  flex: 1;
+  min-width: 180px;
+  font: inherit;
+  font-size: 13.5px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+}
