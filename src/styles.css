@@ -1021,3 +1021,16 @@ a.link-a {
   text-align: center;
 }
 a.link-a:hover { background: var(--green-tint); }
+
+.flyer-tilemap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid #d3e4d6;
+  background: #f4f8f5;
+  max-width: 100%;
+  margin: 0 auto;
+}
+.flyer-tilemap img { position: absolute; width: 256px; height: 256px; }
+.flyer-tilemap svg { position: absolute; left: 0; top: 0; }
+.flyer-map-credit { font-size: 10.5px; color: #7d9184; margin: 4px 0 0; text-align: right; }

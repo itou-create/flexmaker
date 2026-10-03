@@ -33,39 +33,70 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-/** 区域と乗り場を、タイル無しの小さな地図（SVG）にする */
-function zoneSvg(a: ViewArea, colorIndex: number): string {
+// ── 地図（地理院タイルの淡色地図を下図に、区域と乗り場を重ねる）──
+// Leaflet は印刷時の再描画が不安定なので、タイル画像を静的に並べる。
+// Webメルカトルの画素座標（ズーム z で世界が 256×2^z px）で計算する。
+
+const TILE = 256
+const lonToX = (lon: number, z: number): number => ((lon + 180) / 360) * TILE * 2 ** z
+const latToY = (lat: number, z: number): number => {
+  const r = (lat * Math.PI) / 180
+  return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * TILE * 2 ** z
+}
+
+/** 区域・乗り場に下図を敷いた印刷向きの地図 HTML */
+function mapBlock(a: ViewArea, colorIndex: number): string {
   const pts: [number, number][] = []
   for (const z of [...a.board.zones, ...a.alight.zones]) for (const ring of z.rings) pts.push(...ring)
   for (const st of [...a.board.stops, ...a.alight.stops]) pts.push([st.lon, st.lat])
-  if (pts.length < 3) return ''
-  const lons = pts.map((p) => p[0])
-  const lats = pts.map((p) => p[1])
-  const minLon = Math.min(...lons)
-  const maxLon = Math.max(...lons)
-  const minLat = Math.min(...lats)
-  const maxLat = Math.max(...lats)
-  // 緯度方向と横方向の縮尺を合わせる（経度は cos(緯度) で縮む）
-  const kx = Math.cos(((minLat + maxLat) / 2) * (Math.PI / 180))
-  const W = 460
-  const spanX = (maxLon - minLon) * kx || 1e-6
-  const spanY = maxLat - minLat || 1e-6
-  const H = Math.max(200, Math.min(420, (W * spanY) / spanX))
-  const sx = (lon: number): number => (((lon - minLon) * kx) / spanX) * (W - 20) + 10
-  const sy = (lat: number): number => ((maxLat - lat) / spanY) * (H - 20) + 10
-  const color = areaColor(colorIndex)
+  if (pts.length < 2) return ''
+  const minLon = Math.min(...pts.map((p) => p[0]))
+  const maxLon = Math.max(...pts.map((p) => p[0]))
+  const minLat = Math.min(...pts.map((p) => p[1]))
+  const maxLat = Math.max(...pts.map((p) => p[1]))
 
+  // 中身が約 340×380px に収まる最大ズームを選ぶ（A4 の半カラムに合う大きさ）
+  let z = 17
+  while (z > 5) {
+    const w = lonToX(maxLon, z) - lonToX(minLon, z)
+    const h = latToY(minLat, z) - latToY(maxLat, z)
+    if (w <= 340 && h <= 380) break
+    z--
+  }
+  const PAD = 18
+  const x0 = lonToX(minLon, z) - PAD
+  const y0 = latToY(maxLat, z) - PAD
+  const W = Math.round(lonToX(maxLon, z) - lonToX(minLon, z) + PAD * 2)
+  const H = Math.round(latToY(minLat, z) - latToY(maxLat, z) + PAD * 2)
+
+  const tiles: string[] = []
+  for (let tx = Math.floor(x0 / TILE); tx <= Math.floor((x0 + W) / TILE); tx++) {
+    for (let ty = Math.floor(y0 / TILE); ty <= Math.floor((y0 + H) / TILE); ty++) {
+      tiles.push(
+        `<img src="https://cyberjapandata.gsi.go.jp/xyz/pale/${z}/${tx}/${ty}.png" alt="" loading="eager" style="left:${Math.round(tx * TILE - x0)}px;top:${Math.round(ty * TILE - y0)}px" onerror="this.remove()">`,
+      )
+    }
+  }
+
+  const color = areaColor(colorIndex)
+  const sx = (lon: number): string => (lonToX(lon, z) - x0).toFixed(1)
+  const sy = (lat: number): string => (latToY(lat, z) - y0).toFixed(1)
   const zonePaths = [...a.board.zones, ...a.alight.zones]
-    .flatMap((z) => z.rings)
-    .map((ring) => `M${ring.map(([lon, lat]) => `${sx(lon).toFixed(1)} ${sy(lat).toFixed(1)}`).join('L')}Z`)
-    .map((d) => `<path d="${d}" fill="${color}" fill-opacity="0.13" stroke="${color}" stroke-width="2.5"/>`)
+    .flatMap((zz) => zz.rings)
+    .map((ring) => `M${ring.map(([lon, lat]) => `${sx(lon)} ${sy(lat)}`).join('L')}Z`)
+    .map((d) => `<path d="${d}" fill="${color}" fill-opacity="0.16" stroke="${color}" stroke-width="3"/>`)
     .join('')
   const seen = new Set<string>()
   const stopDots = [...a.board.stops, ...a.alight.stops]
     .filter((st) => !seen.has(st.id) && seen.add(st.id))
-    .map((st) => `<circle cx="${sx(st.lon).toFixed(1)}" cy="${sy(st.lat).toFixed(1)}" r="3" fill="#fff" stroke="${color}" stroke-width="1.6"/>`)
+    .map((st) => `<circle cx="${sx(st.lon)}" cy="${sy(st.lat)}" r="3.2" fill="#fff" stroke="${color}" stroke-width="1.8"/>`)
     .join('')
-  return `<svg viewBox="0 0 ${W} ${Math.round(H)}" role="img" aria-label="運行範囲のかたち">${zonePaths}${stopDots}</svg>`
+
+  return `<div class="flyer-tilemap" style="width:${W}px;height:${H}px" role="img" aria-label="運行範囲の地図">
+    ${tiles.join('')}
+    <svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${zonePaths}${stopDots}</svg>
+  </div>
+  <p class="flyer-map-credit">地図：国土地理院（地理院タイル・淡色地図）</p>`
 }
 
 function flyerHtml(a: ViewArea, i: number, data: DemoData): string {
@@ -91,7 +122,7 @@ function flyerHtml(a: ViewArea, i: number, data: DemoData): string {
     </header>
     <div class="flyer-cols">
       <div class="flyer-map">
-        ${zoneSvg(a, i)}
+        ${mapBlock(a, i)}
         <p class="flyer-caption">${esc(mapCaption)}</p>
       </div>
       <div class="flyer-info">
@@ -150,7 +181,12 @@ async function main(): Promise<void> {
     </div>
     ${data.view.areas.map((a, i) => flyerHtml(a, i, data)).join('')}
   `
-  document.getElementById('print-btn')?.addEventListener('click', () => window.print())
+  // 印刷は下図のタイル画像がそろってから（読み込み中に刷ると地図が欠ける）
+  document.getElementById('print-btn')?.addEventListener('click', () => {
+    void Promise.allSettled([...document.images].map((img) => img.decode().catch(() => undefined))).then(() =>
+      window.print(),
+    )
+  })
 }
 
 void main()
