@@ -285,8 +285,10 @@ export function buildFlexFiles(s: DemandService, now = new Date()): GtfsFiles {
   const starts = s.areas.map((a) => a.calendar.startDate).filter((d) => d.length === 8)
   const ends = s.areas.map((a) => a.calendar.endDate).filter((d) => d.length === 8)
   const ymd = now.toISOString().slice(0, 10).replace(/-/g, '')
+  // feed_contact_url は公開者URLを使う（正規バリデータが「連絡先が無い」と注意するため。
+  // 専用の問い合わせ先を分けたくなったら入力欄を足す）
   files['feed_info.txt'] = toCsv(
-    ['feed_publisher_name', 'feed_publisher_url', 'feed_lang', 'feed_start_date', 'feed_end_date', 'feed_version'],
+    ['feed_publisher_name', 'feed_publisher_url', 'feed_lang', 'feed_start_date', 'feed_end_date', 'feed_version', 'feed_contact_url'],
     [
       {
         feed_publisher_name: s.feedPublisherName,
@@ -295,6 +297,7 @@ export function buildFlexFiles(s: DemandService, now = new Date()): GtfsFiles {
         feed_start_date: starts.length ? starts.reduce((a, b) => (a < b ? a : b)) : '',
         feed_end_date: ends.length ? ends.reduce((a, b) => (a > b ? a : b)) : '',
         feed_version: ymd,
+        feed_contact_url: s.feedPublisherUrl,
       },
     ],
   )

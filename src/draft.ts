@@ -19,11 +19,13 @@ export function emptyService(): DemandService {
 export interface Draft {
   service: DemandService
   activeArea: number
+  /** 最後に保存した日時（ISO。マイページの表示用） */
+  savedAt?: string
 }
 
 export function saveDraft(service: DemandService, activeArea: number): void {
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({ service, activeArea }))
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ service, activeArea, savedAt: new Date().toISOString() }))
   } catch {
     /* プライベートモード等で保存できなくても、画面の動作は止めない */
   }

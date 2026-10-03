@@ -116,8 +116,21 @@ Flex で増えるのは4ファイル。他は通常の GTFS と同じ。
 
 ## 8. 検証（バリデータ）
 
-- MobilityData **gtfs-validator**（Java）：https://github.com/MobilityData/gtfs-validator — Flex のルールをどこまで実装しているかは**要確認**。Web 版 https://gtfs-validator.mobilitydata.org/ にzipを投げれば手軽
+- MobilityData **gtfs-validator**（Java）：https://github.com/MobilityData/gtfs-validator — Web 版 https://gtfs-validator.mobilitydata.org/ にzipを投げれば手軽
 - このツールの `src/gtfs/validate.ts` は、上の条件付き必須／禁止のうち Flex 固有のものだけを実装した簡易版。**正規バリデータの代わりにはならない**
+
+### 正規バリデータでの検証結果（2026-10-03、gtfs-validator v8.0.1 CLI・Java 17）
+
+| フィード | ERROR | WARNING |
+|---|---|---|
+| flexmaker 出力：田村らくらくタクシー（5エリア・運休日・便別締切入り） | **0** | mixed_case ×20（下記） |
+| flexmaker 出力：サンプル町（2エリア） | **0** | mixed_case ×11 |
+| 比較：ODPT 実データ 瑞穂町 | 0 | contact無し ×1、mixed_case ×14、unexpected_enum_value ×1 |
+
+- `mixed_case_recommended_field` は**日本語テキストへの誤検知**（大文字小文字の概念が無い）。無視してよい
+- `missing_feed_contact_email_and_url` は feed_info に `feed_contact_url`（＝公開者URL）を出すようにして解消（2026-10-03）
+- v8.0.1 は Flex ファイル（locations.geojson / booking_rules / location_groups）を読んで検査する。
+  flexmaker の出力はエラーゼロで通り、警告の数は ODPT の流通実データより少ない
 
 ## 9. 消費側（作ったデータを確かめる）
 

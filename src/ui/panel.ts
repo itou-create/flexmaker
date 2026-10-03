@@ -147,6 +147,7 @@ function render(): void {
     <div class="head-actions">
       <button type="button" data-act="load-example" class="link">サンプルを読み込む</button>
       <button type="button" data-act="load-tamura" class="link">実例（田村市）</button>
+      <a href="mypage.html" class="link link-a">マイページ（試作）</a>
       <button type="button" data-act="show-intro" class="link">使い方</button>
     </div>
   </header>
