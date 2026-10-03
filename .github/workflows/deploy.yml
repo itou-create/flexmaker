@@ -24,7 +24,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Google マップのブラウザ用キー（任意）。リポジトリの Secrets に PUBLIC_GMAPS_KEY を
+      # 登録するとビルドに埋め込まれ、全利用者の地図が Google になる。
+      # 未登録なら空のまま＝地理院タイルで動く。キーは必ずリファラ制限＋割り当て上限を設定すること
       - run: npm run build
+        env:
+          VITE_PUBLIC_GMAPS_KEY: ${{ secrets.PUBLIC_GMAPS_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

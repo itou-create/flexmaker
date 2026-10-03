@@ -15,7 +15,7 @@ import { readFlexFiles } from './gtfs/flexReader.ts'
 import { buildZip, downloadBytes } from './gtfs/zip'
 import { savePreview } from './preview'
 import { areaColor } from './areaColors'
-import { getGoogleMapsKey, setGoogleMapsKey } from './mapsKey'
+import { getGoogleMapsKey, hasPersonalKey, hasPublicKey, setGoogleMapsKey } from './mapsKey'
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -87,15 +87,23 @@ function render(): void {
 
     <section class="mp-card">
       <h2>Google マップ連携</h2>
-      <p>お手持ちの Google Maps API キーをこの端末に保存すると、チラシとサイネージの地図が Google マップになります
-      （未設定・読み込み失敗時は地理院地図）。キーは<b>この端末にだけ</b>保存され、サーバやリポジトリには入りません。</p>
+      <p>${
+        hasPublicKey()
+          ? 'このサイトには運営側のキーが設定済みです。<b>全員、何もしなくても Google マップで表示されます。</b>別のキーを使いたいときだけ、下に入力してください（この端末だけ上書き）。'
+          : '運営側のキーが未設定のため、いまは地理院地図で表示しています。運営者は GitHub の Secrets（PUBLIC_GMAPS_KEY）にキーを登録すると全員が Google マップになります。お急ぎの場合は、お手持ちのキーを下に入力するとこの端末だけ Google になります。'
+      }</p>
       <div class="mp-actions">
         <input type="password" id="gmaps-key" class="mp-key-input" placeholder="AIza…" autocomplete="off">
         <button type="button" class="secondary" data-act="gkey-save">保存</button>
-        ${getGoogleMapsKey() ? '<button type="button" class="secondary small" data-act="gkey-clear">削除</button>' : ''}
+        ${hasPersonalKey() ? '<button type="button" class="secondary small" data-act="gkey-clear">この端末の設定を消す</button>' : ''}
       </div>
-      <p class="check-small">状態：${getGoogleMapsKey() ? '設定済み ✓（Google マップで表示）' : '未設定（地理院地図で表示中）'}
-      ／ キー側では Maps Static API の有効化と HTTP リファラー制限をお忘れなく</p>
+      <p class="check-small">状態：${
+        hasPersonalKey()
+          ? 'この端末のキーで Google 表示中 ✓'
+          : hasPublicKey()
+            ? '運営側のキーで Google 表示中 ✓'
+            : '未設定（地理院地図で表示中）'
+      }</p>
     </section>
 
     <section class="mp-card mp-mock">

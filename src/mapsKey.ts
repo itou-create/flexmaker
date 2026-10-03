@@ -11,12 +11,37 @@
 
 const KEY_STORAGE = 'flexmaker:gmapsKey'
 
+/**
+ * 運営側のキー。GitHub の Secrets（PUBLIC_GMAPS_KEY）に登録するとビルド時に
+ * ここへ埋め込まれ、全利用者の地図が Google になる。ソースには値を書かない。
+ */
+const PUBLIC_KEY = (import.meta.env.VITE_PUBLIC_GMAPS_KEY as string | undefined) ?? ''
+
+const KEY_RE = /^AIza[0-9A-Za-z_-]{35}$/
+
+/** 端末に保存した個人キーがあればそれを優先し、無ければ運営側のキー */
 export function getGoogleMapsKey(): string | null {
   try {
     const k = localStorage.getItem(KEY_STORAGE)
-    return k && /^AIza[0-9A-Za-z_-]{35}$/.test(k) ? k : null
+    if (k && KEY_RE.test(k)) return k
   } catch {
-    return null
+    /* localStorage が読めない環境でも運営キーは使える */
+  }
+  return KEY_RE.test(PUBLIC_KEY) ? PUBLIC_KEY : null
+}
+
+/** 運営側のキーがビルドに入っているか（マイページの表示用） */
+export function hasPublicKey(): boolean {
+  return KEY_RE.test(PUBLIC_KEY)
+}
+
+/** この端末に個人キーが保存されているか（マイページの表示用） */
+export function hasPersonalKey(): boolean {
+  try {
+    const k = localStorage.getItem(KEY_STORAGE)
+    return !!k && KEY_RE.test(k)
+  } catch {
+    return false
   }
 }
 
