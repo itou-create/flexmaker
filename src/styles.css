@@ -1096,3 +1096,11 @@ a.link-a:hover { background: var(--green-tint); }
   background: var(--surface);
   color: var(--ink);
 }
+
+.flyer-tilemap img.flyer-gimg {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
