@@ -13,8 +13,10 @@
 //   - locations.geojson の id、location_group_id、stop_id は全体で一意
 // 詳細は docs/gtfs-flex-reference.md
 
-import type { DemandService, GtfsFiles, OperationPattern } from '../types'
-import { toCsv, type Row } from './csv'
+// .ts 拡張子付きで import しているのは、Node（scripts/ の変換・生成スクリプト）からも
+// そのまま実行できるようにするため（flexReader と同じ）
+import type { DemandService, GtfsFiles, OperationPattern } from '../types.ts'
+import { toCsv, type Row } from './csv.ts'
 
 const STOP_TIMES_COLUMNS = [
   'trip_id',

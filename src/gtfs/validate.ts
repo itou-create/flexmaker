@@ -8,8 +8,8 @@
 // ルールの出典：GTFS Schedule Reference（google/transit）stop_times.txt / booking_rules.txt /
 // location_groups.txt / location_group_stops.txt / locations.geojson の Presence 列。
 
-import type { GtfsFiles, ValidationIssue } from '../types'
-import { parseCsv } from './csv'
+import type { GtfsFiles, ValidationIssue } from '../types.ts'
+import { parseCsv } from './csv.ts'
 
 const TIME_RE = /^\d{1,2}:\d{2}:\d{2}$/
 

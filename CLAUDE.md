@@ -148,6 +148,9 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
 - **住民向け確認ページの試作（2026-09-26）**：`check.html` + `src/check.ts`。瑞穂町「チョイソコみずほまち」1件分。
   地図タップ → 近くの乗り場3件と徒歩目安、運行日・時間帯、予約電話（tel: リンク）、出典表示。
   データは `scripts/convert-sample.mjs` で `public/data/*.json` に変換して同梱
+- **実在自治体の試作（2026-10-03）**：田村市「田村らくらくタクシー」の滝根エリア（町内移動・区域方式）を
+  `scripts/make-tamura-takine.mjs` で起こし、zip 生成・検証・読み戻しまで確認。企画書8章の「実際に起こす自治体」の
+  第一候補。残り4エリアとエリア間の便は、複数区域対応（ロードマップ7）ができてから
 - **プレビュー連携（2026-09-26）**：作成画面の「住民ページで見る」→ `check.html#preview`。
   受け渡しは `src/preview.ts`（localStorage 経由・サーバ不要）。中身は flexWriter → flexReader を
   通した FlexView なので、zip に入るものと同じ解釈で表示される。区域だけの形態（乗り場ゼロ）は
