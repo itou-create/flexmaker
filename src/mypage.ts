@@ -15,7 +15,7 @@ import { readFlexFiles } from './gtfs/flexReader.ts'
 import { buildZip, downloadBytes } from './gtfs/zip'
 import { savePreview } from './preview'
 import { areaColor } from './areaColors'
-import { getGoogleMapsKey, hasPersonalKey, hasPublicKey, setGoogleMapsKey } from './mapsKey'
+import { hasPersonalKey, hasPublicKey, setGoogleMapsKey } from './mapsKey'
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
