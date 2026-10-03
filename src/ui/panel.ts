@@ -5,6 +5,7 @@
 import { buildFlexFiles, emptyArea, needsStops, needsZone } from '../gtfs/flexWriter'
 import { readFlexFiles } from '../gtfs/flexReader.ts'
 import { exampleService } from '../gtfs/example'
+import { tamuraService } from '../gtfs/tamura.ts'
 import { validateFlexFiles } from '../gtfs/validate'
 import { buildZip, downloadBytes } from '../gtfs/zip'
 import { savePreview } from '../preview'
@@ -142,6 +143,7 @@ function render(): void {
     </div>
     <div class="head-actions">
       <button type="button" data-act="load-example" class="link">サンプルを読み込む</button>
+      <button type="button" data-act="load-tamura" class="link">実例（田村市）</button>
       <button type="button" data-act="show-intro" class="link">使い方</button>
     </div>
   </header>
@@ -527,6 +529,12 @@ function onClick(e: Event): void {
     }
     case 'load-example':
       setState({ service: exampleService(), activeArea: 0, draftPolygon: [], mapMode: 'none', issues: null })
+      fitToService()
+      break
+    case 'load-tamura':
+      // 実在の運行要領から起こした実例（src/gtfs/tamura.ts に出典と注意書き）。
+      // 4エリア・運休日・朝便の前日締切が全部入っているので、機能のショーケースも兼ねる
+      setState({ service: tamuraService(), activeArea: 0, draftPolygon: [], mapMode: 'none', issues: null })
       fitToService()
       break
     case 'show-intro':
