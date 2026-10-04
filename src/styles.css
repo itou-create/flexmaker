@@ -1125,3 +1125,12 @@ a.link-a:hover { background: var(--green-tint); }
 }
 .mp-empty { color: var(--muted); font-size: 13px; }
 .mp-notices .x { border: none; background: none; padding: 0 6px; font-size: 16px; color: var(--muted); cursor: pointer; float: right; }
+
+/* Google マップ上の乗降場所ラベル（作成画面） */
+.gmap-stop-label {
+  background: rgba(255, 255, 255, 0.92);
+  color: #22372b;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid #4a80e0;
+}

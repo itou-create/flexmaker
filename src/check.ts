@@ -16,6 +16,7 @@ import { areaColor } from './areaColors'
 import { bookingText, daysText, windowsText } from './viewText'
 import { bookingNow } from './bookingNow'
 import { getGoogleMapsKey } from './mapsKey'
+import { createGoogleMap, gapi } from './gmaps'
 import type { NoticeItem } from './types'
 
 interface DemoSource {
@@ -106,8 +107,6 @@ let gShapes: any[] = []
 let gHome: any = null
 let gLines: any[] = []
 
-const gapi = (): any => (window as unknown as { google?: unknown }).google
-
 /** 地図のタップ（両エンジン共通の処理） */
 function handleTap(lat: number, lon: number): void {
   picked = { lat, lon }
@@ -122,52 +121,13 @@ function handleTap(lat: number, lon: number): void {
   document.getElementById('map-hint')?.setAttribute('hidden', '')
 }
 
-function loadGoogleScript(key: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const t = setTimeout(() => resolve(false), 7000)
-    const w = window as unknown as Record<string, unknown>
-    w.__gmapsReady = () => {
-      clearTimeout(t)
-      resolve(true)
-    }
-    const s = document.createElement('script')
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&language=ja&region=JP&loading=async&callback=__gmapsReady`
-    s.onerror = () => {
-      clearTimeout(t)
-      resolve(false)
-    }
-    document.head.appendChild(s)
-  })
-}
-
 /** Google の地図を試す。キー無し・読み込み失敗・認証エラー（API未有効等）なら false */
 async function tryGoogleMap(el: HTMLElement): Promise<boolean> {
   const key = getGoogleMapsKey()
   if (!key) return false
-  let failed = false
-  ;(window as unknown as Record<string, unknown>).gm_authFailure = () => {
-    failed = true
-  }
-  if (!(await loadGoogleScript(key))) return false
-  const g = gapi()
-  if (!g?.maps) return false
-  gmap = new g.maps.Map(el, {
-    center: { lat: 36.2, lng: 138.3 },
-    zoom: 5,
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false,
-    clickableIcons: false,
-    gestureHandling: 'greedy',
-  })
+  gmap = await createGoogleMap(el, key)
+  if (!gmap) return false
   gmap.addListener('click', (e: any) => handleTap(e.latLng.lat(), e.latLng.lng()))
-  // 認証エラー（ApiNotActivatedMapError 等）は読み込みの少し後に届くので、短く待って判定
-  await new Promise((r) => setTimeout(r, 1500))
-  if (failed) {
-    gmap = null
-    el.innerHTML = ''
-    return false
-  }
   return true
 }
 
