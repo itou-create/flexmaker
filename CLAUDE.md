@@ -182,9 +182,11 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
   （公開リポジトリのため。自動の安全機構にも止められた）。担当者がマイページで入力して
   localStorage に保存（`src/mapsKey.ts`）。キーがあればチラシの下図に Maps Static API の画像を重ね、
   無い/失敗時は地理院タイルに自動フォールバック（`src/googleStatic.ts`・ポリラインエンコーダ内蔵）。
-  2026-10-03 に Maps Static API / Maps JavaScript API とも有効化され、チラシ・サイネージ・住民ページ全てで
-  Google 表示を本番確認済み（リファラ制限の動作も実測確認）。住民ページは Google 優先・失敗時は
-  Leaflet＋地理院に自動フォールバックの二段構え。作成画面のみ地理院のまま（無料枠の節約）
+  2026-10-03〜05 に Maps Static API / Maps JavaScript API とも有効化され、チラシ・サイネージ・住民ページ・
+  作成画面の全てで Google 表示を本番確認済み（リファラ制限の動作も実測確認）。動的地図は
+  `src/gmaps.ts`（読み込み・認証判定の共通部品）経由で「Google 優先・失敗時は Leaflet＋地理院に
+  自動フォールバック」の二段構え。無料枠は月1万表示で十分だが、Google Cloud 側で1日あたりの
+  割り当て上限を設定しておくこと（使いすぎ課金の保険）
 - **チラシ印刷ページ（2026-10-03）**：`flyer.html` + `src/flyer.ts`。エリアごとに A4 1枚（@page・印刷CSS）。
   区域はタイルを使わず SVG で描く（印刷時のタイル欠け防止）。入口は住民ページの下のリンクと
   作成画面の「チラシ（A4）を印刷する」（プレビューと同じ localStorage 連携）。
