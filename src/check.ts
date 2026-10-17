@@ -18,6 +18,24 @@ import { bookingNow } from './bookingNow'
 import { getGoogleMapsKey } from './mapsKey'
 import { createGoogleMap, gapi } from './gmaps'
 import type { NoticeItem } from './types'
+import {
+  addFixedFeed,
+  addFlexView,
+  buildTransfers,
+  createTimetable,
+  type Timetable,
+} from './transit/timetable.ts'
+import { search, type Journey, type Leg, type Pt } from './transit/router.ts'
+import { journeysHtml } from './transit/journeyView.ts'
+import {
+  COMPANIONS,
+  PREF_NAMES,
+  REPO_TOP_URL,
+  listRepoFeeds,
+  loadRepoFeed,
+  type RepoFeed,
+  type RepoFeedInfo,
+} from './transit/sources.ts'
 
 interface DemoSource {
   municipality: string
@@ -90,6 +108,31 @@ let data: DemoData
 let area: ViewArea
 let picked: { lat: number; lon: number } | null = null
 
+// ── 乗り継ぎ検索（どこへ行く？）の状態 ─────────
+// 行き先は地図を押すか、乗り降りできる場所の一覧から選ぶ。時刻表は Flex（この画面のデータ）に
+// 公表されている路線バス等（gtfs-data.jp）を足して組み、乗り継ぎを考慮して探す（src/transit/）。
+let pickMode: 'origin' | 'dest' = 'origin'
+let dest: Pt | null = null
+let tt: Timetable | null = null
+let ttBuilding: Promise<Timetable> | null = null
+/** 読み込んだ固定路線の状態（表示用） */
+let feedStatus: { feed: RepoFeed; state: 'loading' | 'ok' | 'fail'; detail?: string }[] = []
+/** 利用者が「路線バスのデータを足す」で追加したもの */
+let extraFeeds: RepoFeed[] = []
+const loadedFiles = new Map<string, Record<string, string>>()
+let journeys: Journey[] | null = null
+let searching = false
+let selectedJourney = 0
+let repoList: RepoFeedInfo[] | null = null
+let repoPref = 0
+const nowRounded = ((): { date: string; time: string } => {
+  const d = new Date(Date.now() + 5 * 60000)
+  d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0)
+  const p2 = (n: number): string => String(n).padStart(2, '0')
+  return { date: `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`, time: `${p2(d.getHours())}:${p2(d.getMinutes())}` }
+})()
+const when = { ...nowRounded }
+
 // ── 地図エンジン ─────────────────────────────
 // Google マップ（運営側キーがあり Maps JavaScript API が使えるとき）を優先し、
 // 使えなければ Leaflet ＋ 地理院タイルに自動で切り替える（キー無し・API未有効・
@@ -109,7 +152,17 @@ let gLines: any[] = []
 
 /** 地図のタップ（両エンジン共通の処理） */
 function handleTap(lat: number, lon: number): void {
+  if (pickMode === 'dest') {
+    dest = { lat, lon, name: '地図で選んだ場所' }
+    pickMode = 'origin'
+    document.getElementById('map-hint')?.setAttribute('hidden', '')
+    void runSearch()
+    renderMap()
+    renderPanel()
+    return
+  }
   picked = { lat, lon }
+  if (dest) void runSearch()
   // 押した場所が別のエリアの区域の中なら、そのエリアに切り替える
   // （住民はエリアの境目を知らないので、地図に任せる）
   const hit = data.view.areas.find((x) =>
@@ -229,6 +282,56 @@ function renderGoogleMap(): void {
       )
     }
   }
+  if (dest) {
+    gLines.push(
+      new g.maps.Marker({
+        map: gmap,
+        position: { lat: dest.lat, lng: dest.lon },
+        title: '行き先',
+        clickable: false,
+        zIndex: 10,
+        icon: { path: g.maps.SymbolPath.CIRCLE, scale: 10, fillColor: '#cfeedb', fillOpacity: 0.95, strokeColor: '#227a4d', strokeWeight: 4 },
+      }),
+    )
+  }
+  const j = journeys?.[selectedJourney]
+  if (j) {
+    for (const leg of j.legs) {
+      const st = legStyle(leg)
+      gLines.push(
+        new g.maps.Polyline({
+          map: gmap,
+          path: legPts(leg).map(([lat, lng]) => ({ lat, lng })),
+          clickable: false,
+          strokeColor: st.color,
+          strokeWeight: st.weight,
+          strokeOpacity: st.dash ? 0 : 0.9,
+          zIndex: 5,
+          icons: st.dash
+            ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.9, strokeColor: st.color, strokeWeight: st.weight, scale: 3 }, offset: '0', repeat: '14px' }]
+            : undefined,
+        }),
+      )
+    }
+  }
+}
+
+/** 経路の区間ごとの線の見た目（両エンジン共通）。徒歩＝点線の灰、デマンド＝点線の桃、バス＝路線色の実線 */
+function legStyle(leg: Leg): { color: string; weight: number; dash: boolean } {
+  if (leg.kind === 'walk') return { color: '#7d9184', weight: 4, dash: true }
+  if (leg.kind === 'flex') return { color: '#b0416f', weight: 5, dash: true }
+  return { color: leg.pattern.color ?? '#4a80e0', weight: 6, dash: false }
+}
+
+/** 区間を地図に描くための [緯度, 経度] の列 */
+function legPts(leg: Leg): [number, number][] {
+  if (leg.kind === 'bus') {
+    return leg.pattern.stops.slice(leg.fromIdx, leg.toIdx + 1).map((s) => [tt!.stops[s].lat, tt!.stops[s].lon])
+  }
+  return [
+    [leg.from.lat, leg.from.lon],
+    [leg.to.lat, leg.to.lon],
+  ]
 }
 
 function renderLeafletMap(): void {
@@ -277,6 +380,27 @@ function renderLeafletMap(): void {
           ],
           { color: '#b0416f', weight: 3, dashArray: '4 7', opacity: 0.8 },
         ).addTo(lmap),
+      )
+    }
+  }
+  if (dest) {
+    const d = L.circleMarker([dest.lat, dest.lon], { radius: 11, color: '#227a4d', weight: 4, fillColor: '#cfeedb', fillOpacity: 0.95 })
+      .bindTooltip('行き先', { permanent: true, direction: 'top', offset: [0, -10], className: 'stop-label' })
+      .addTo(lmap)
+    lLines.push(d as unknown as L.Polyline)
+  }
+  const j = journeys?.[selectedJourney]
+  if (j) {
+    for (const leg of j.legs) {
+      const st = legStyle(leg)
+      lLines.push(
+        L.polyline(legPts(leg) as L.LatLngExpression[], {
+          color: st.color,
+          weight: st.weight,
+          opacity: 0.9,
+          dashArray: st.dash ? '2 10' : undefined,
+          lineCap: 'round',
+        }).addTo(lmap),
       )
     }
   }
@@ -337,6 +461,223 @@ function pickedCard(): string {
   </section>`
 }
 
+// ── 乗り継ぎ検索 ──────────────────────────────
+
+function datasetId(): string | null {
+  const u = data.source?.datasetUrl
+  return u ? (u.replace(/\/+$/, '').split('/').pop() ?? null) : null
+}
+
+/** この画面で使う固定路線（同梱データに紐づく分＋利用者が足した分） */
+function fixedFeeds(): RepoFeed[] {
+  const id = datasetId()
+  const base = id ? (COMPANIONS[id] ?? []) : []
+  return [...base, ...extraFeeds.filter((e) => !base.some((b) => b.org === e.org && b.feed === e.feed))]
+}
+
+async function buildTimetable(): Promise<Timetable> {
+  const t = createTimetable()
+  const s = data.source
+  addFlexView(t, data.view, {
+    label: s?.serviceName ?? (area.name || '作成中のデマンド交通'),
+    provider: s?.provider ?? data.view.agencyName,
+    url: s?.datasetUrl,
+    license: s?.license,
+    licenseUrl: s?.licenseUrl,
+  })
+  feedStatus = fixedFeeds().map((feed) => ({ feed, state: 'loading' as const }))
+  renderPanel()
+  for (const st of feedStatus) {
+    const key = `${st.feed.org}/${st.feed.feed}`
+    try {
+      let files = loadedFiles.get(key)
+      if (!files) {
+        files = await loadRepoFeed(st.feed)
+        loadedFiles.set(key, files)
+      }
+      const n = addFixedFeed(t, files, {
+        label: st.feed.label,
+        provider: st.feed.provider,
+        url: REPO_TOP_URL,
+        license: st.feed.license,
+        licenseUrl: st.feed.licenseUrl,
+      })
+      st.state = n > 0 ? 'ok' : 'fail'
+      st.detail = n > 0 ? `${n}便` : '時刻表が読めませんでした'
+    } catch (e) {
+      st.state = 'fail'
+      st.detail = e instanceof Error ? e.message : String(e)
+    }
+    renderPanel()
+  }
+  buildTransfers(t)
+  tt = t
+  return t
+}
+
+function ensureTimetable(): Promise<Timetable> {
+  if (tt) return Promise.resolve(tt)
+  if (!ttBuilding) ttBuilding = buildTimetable()
+  return ttBuilding
+}
+
+/** 固定路線を足したり外したりしたら時刻表を組み直す */
+function resetTimetable(): void {
+  tt = null
+  ttBuilding = null
+  journeys = null
+  void ensureTimetable().then(() => (dest ? runSearch() : undefined))
+}
+
+async function runSearch(): Promise<void> {
+  if (!picked || !dest) return
+  searching = true
+  journeys = null
+  renderPanel()
+  const t = await ensureTimetable()
+  const [y, mo, d] = when.date.split('-').map(Number)
+  const [h, mi] = when.time.split(':').map(Number)
+  const date = new Date(y, mo - 1, d)
+  journeys = search(t, { ...picked, name: '乗りたい場所' }, dest, { date, depSec: h * 3600 + mi * 60 })
+  selectedJourney = 0
+  searching = false
+  renderPanel()
+  renderMap()
+  const j = journeys[0]
+  if (j) fitPts(j.legs.flatMap(legPts))
+}
+
+/** 行き先の候補（この画面のデマンド交通で降りられる場所＋読み込んだ路線バスの停留所） */
+function destOptions(): string {
+  const groups: { label: string; items: { key: string; name: string }[] }[] = []
+  const seen = new Set<string>()
+  const flexItems: { key: string; name: string }[] = []
+  for (const st of data.view.areas.flatMap((a) => a.alight.stops)) {
+    if (seen.has(st.name)) continue
+    seen.add(st.name)
+    flexItems.push({ key: `f:${st.lat},${st.lon}`, name: st.name })
+  }
+  if (flexItems.length) groups.push({ label: 'デマンド交通で降りられる場所', items: flexItems })
+  if (tt) {
+    tt.sources.forEach((src, i) => {
+      if (src.kind !== 'fixed') return
+      const items: { key: string; name: string }[] = []
+      for (const st of tt!.stops) {
+        if (st.feed !== i || seen.has(st.name)) continue
+        seen.add(st.name)
+        items.push({ key: `f:${st.lat},${st.lon}`, name: st.name })
+      }
+      items.sort((a, b) => a.name.localeCompare(b.name, 'ja'))
+      if (items.length) groups.push({ label: `${src.label}の停留所`, items })
+    })
+  }
+  const sel = dest ? `f:${dest.lat},${dest.lon}` : ''
+  return groups
+    .map(
+      (g) =>
+        `<optgroup label="${esc(g.label)}">${g.items
+          .map((it) => `<option value="${esc(it.key)}" data-name="${esc(it.name)}" ${it.key === sel ? 'selected' : ''}>${esc(it.name)}</option>`)
+          .join('')}</optgroup>`,
+    )
+    .join('')
+}
+
+function feedStatusHtml(): string {
+  const lines = feedStatus.map((st) => {
+    const mark = st.state === 'ok' ? '✓' : st.state === 'fail' ? '✕' : '…'
+    const txt = st.state === 'loading' ? '読み込んでいます' : st.state === 'ok' ? `読み込みました（${st.detail}）` : '読み込めませんでした'
+    const removable = extraFeeds.some((e) => e.org === st.feed.org && e.feed === st.feed.feed)
+    return `<li class="${st.state}"><b>${mark}</b> ${esc(st.feed.label)}：${txt}${
+      removable ? ` <button type="button" class="jr-mini" data-act="remove-feed" data-key="${esc(st.feed.org)}/${esc(st.feed.feed)}">外す</button>` : ''
+    }</li>`
+  })
+  return lines.length ? `<ul class="jr-feeds">${lines.join('')}</ul>` : ''
+}
+
+function addFeedHtml(): string {
+  const list = repoList
+  const prefOptions = PREF_NAMES.map((n, i) => (i === 0 ? '' : `<option value="${i}" ${i === repoPref ? 'selected' : ''}>${n}</option>`)).join('')
+  const feedsInPref = list ? list.filter((f) => f.prefId === repoPref) : []
+  const feedSelect = list
+    ? `<label>データ <select data-act="add-feed" class="jr-select"><option value="">選んでください（${feedsInPref.length}件）</option>${feedsInPref
+        .map((f, i) => `<option value="${i}">${esc(f.provider)}　${esc(f.label)}</option>`)
+        .join('')}</select></label>`
+    : `<span class="check-small">一覧を読み込んでいます…</span>`
+  return `<details class="jr-add" ${extraFeeds.length || repoList ? 'open' : ''}>
+    <summary>路線バスなどの時刻表を足す（公表されている GTFS）</summary>
+    <p class="check-small">国の <a href="${REPO_TOP_URL}" target="_blank" rel="noopener">GTFS データリポジトリ</a>に公開されているデータを、このページに読み込んで乗り継ぎに使えます。</p>
+    <div class="jr-add-row">
+      <label>都道府県 <select data-act="pref" class="jr-select"><option value="0">選んでください</option>${prefOptions}</select></label>
+      ${repoPref > 0 ? feedSelect : ''}
+    </div>
+  </details>`
+}
+
+function searchCard(): string {
+  if (!picked) return ''
+  let destLine: string
+  if (dest) {
+    destLine = `<p class="jr-dest">行き先：<b>${esc(dest.name ?? '地図で選んだ場所')}</b>
+      <button type="button" class="jr-mini" data-act="pick-dest">地図で選び直す</button>
+      <button type="button" class="jr-mini" data-act="clear-dest">消す</button></p>`
+  } else if (pickMode === 'dest') {
+    destLine = `<p class="check-big jr-picking">上の地図で<b>「行き先」を指で押して</b>ください。<button type="button" class="jr-mini" data-act="cancel-dest">やめる</button></p>`
+  } else {
+    destLine = `<div class="jr-dest-pick">
+      <button type="button" class="jr-btn" data-act="pick-dest">🗺 行き先を地図で押す</button>
+      <label class="jr-or">または、場所の名前から
+        <select data-act="dest-stop" class="jr-select"><option value="">選んでください</option>${destOptions()}</select>
+      </label>
+    </div>`
+  }
+  const whenLine = `<div class="jr-when">
+    <label>日にち <input type="date" data-act="when-date" value="${esc(when.date)}"></label>
+    <label>出発したい時刻 <input type="time" data-act="when-time" value="${esc(when.time)}" step="300"></label>
+  </div>`
+  // きょうの過ぎた時刻を調べているときは、その旨を添える（過ぎた便も表に出るため）
+  const pastToday = when.date === nowRounded.date && when.time < nowRounded.time
+  const pastNote = pastToday ? `<p class="check-small">※ もう過ぎた時刻です。きょうこれから乗るなら、時刻を今より後にしてください。</p>` : ''
+  const tomorrowBtn = `<button type="button" class="jr-mini" data-act="when-tomorrow">あすの朝 8:00 で調べる</button>`
+  let result = ''
+  if (dest) {
+    if (searching) result = `<p class="check-big">調べています…</p>`
+    else if (journeys && journeys.length > 0) {
+      result = `${pastNote}<div class="jr-list">${journeysHtml(journeys, (i) => tt?.stops[i]?.name ?? '')}</div>
+        <p class="check-small">所要時間や歩く時間は目安です。デマンド交通は呼んでから迎えが来るまでを約5分、走る速さを約25km/hとして見積もっています。乗りかえには2分の余裕を見ています。</p>`
+    } else if (journeys) {
+      result = `<p class="check-no check-big">この日時では、行き方が見つかりませんでした。</p>
+        ${pastNote}
+        <p class="check-small">日にちや時刻を変えるか、別の行き先でお試しください。走っていない曜日や、予約の締切を過ぎている便は使えません。デマンド交通で行ける範囲の外かもしれません。</p>
+        <p>${tomorrowBtn}</p>`
+    }
+  }
+  const fixedNote =
+    fixedFeeds().length === 0 && !repoList
+      ? `<p class="check-small">いまはデマンド交通だけで調べます。路線バスなどの時刻表を足すと、乗り継いだ行き方も出ます。</p>`
+      : ''
+  return `<section class="check-card jr-card">
+    <h2>どこへ行く？（乗りつぎ検索）</h2>
+    ${destLine}
+    ${dest || pickMode === 'dest' ? whenLine : ''}
+    ${result}
+    ${feedStatusHtml()}
+    ${fixedNote}
+    ${addFeedHtml()}
+  </section>`
+}
+
+/** 乗り継ぎに使った路線バス等の出典（CC BY の表示義務） */
+function fixedSourcesHtml(): string {
+  const ok = feedStatus.filter((st) => st.state === 'ok')
+  if (ok.length === 0) return ''
+  return `<p>乗りつぎ検索の時刻表：${ok
+    .map(
+      (st) =>
+        `${esc(st.feed.provider)}「${esc(st.feed.label)}」${st.feed.license ? `（<a href="${esc(st.feed.licenseUrl ?? '#')}" target="_blank" rel="noopener">${esc(st.feed.license)}</a>）` : ''}`,
+    )
+    .join('、')}／ <a href="${REPO_TOP_URL}" target="_blank" rel="noopener">GTFS データリポジトリ</a>から取得。時刻は変わることがあります。</p>`
+}
+
 function renderPanel(): void {
   const s = data.source
   const b = area.booking
@@ -364,9 +705,11 @@ function renderPanel(): void {
     ? `<footer class="check-foot">
       <p>このページは公式の案内ではありません。最新の運行・予約方法は ${esc(s.provider)} の案内でご確認ください。</p>
       <p>データ出典：${esc(s.provider)}「${esc(s.serviceName)}」（<a href="${esc(s.datasetUrl)}" target="_blank" rel="noopener">公共交通オープンデータセンター</a>、<a href="${esc(s.licenseUrl)}" target="_blank" rel="noopener">${esc(s.license)}</a>）／ ${esc(s.fetchedOn)} 取得</p>
+      ${fixedSourcesHtml()}
     </footer>`
     : `<footer class="check-foot">
       <p>これは作成画面で入力中のデータのプレビューです。保存も公開もされていません。内容を直すときは、作成画面のタブに戻ってください。</p>
+      ${fixedSourcesHtml()}
     </footer>`
 
   // エリア（路線）が複数あるときは、色分けの凡例を兼ねたチップで切り替えられるようにする
@@ -405,6 +748,7 @@ function renderPanel(): void {
     ${areaChips}
     ${nowCard}
     ${pickedCard()}
+    ${searchCard()}
     <section class="check-card">
       <h2>いつ走っている？</h2>
       <p class="check-big"><b>${esc(daysText(area.days))}</b>の <b>${esc(windows)}</b> ${closedNote}</p>
@@ -416,6 +760,49 @@ function renderPanel(): void {
     ${flyerLink}
     ${footer}
   `
+}
+
+function onSearchAction(btn: HTMLElement): void {
+  switch (btn.dataset.act) {
+    case 'pick-dest': {
+      pickMode = 'dest'
+      renderPanel()
+      const hint = document.getElementById('map-hint')
+      if (hint) {
+        hint.textContent = '地図の「行き先」を指で押してください'
+        hint.removeAttribute('hidden')
+      }
+      if (window.matchMedia('(max-width: 899px)').matches) panel.scrollTo({ top: 0 })
+      break
+    }
+    case 'cancel-dest':
+      pickMode = 'origin'
+      document.getElementById('map-hint')?.setAttribute('hidden', '')
+      renderPanel()
+      break
+    case 'clear-dest':
+      dest = null
+      journeys = null
+      renderPanel()
+      renderMap()
+      break
+    case 'when-tomorrow': {
+      const d = new Date()
+      d.setDate(d.getDate() + 1)
+      const p2 = (n: number): string => String(n).padStart(2, '0')
+      when.date = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
+      when.time = '08:00'
+      void runSearch()
+      break
+    }
+    case 'remove-feed': {
+      const key = btn.dataset.key
+      extraFeeds = extraFeeds.filter((e) => `${e.org}/${e.feed}` !== key)
+      resetTimetable()
+      renderPanel()
+      break
+    }
+  }
 }
 
 async function main(): Promise<void> {
@@ -452,11 +839,28 @@ async function main(): Promise<void> {
   await mountMap()
   renderMap()
 
-  // エリア切り替え・全体表示（エリアが複数あるときだけチップが出る）
+  // 時刻表は先に組み始めておく（路線バスの読み込みに数秒かかるため）
+  void ensureTimetable()
+
+  // エリア切り替え・全体表示（エリアが複数あるときだけチップが出る）・乗り継ぎ検索の操作
   panel.addEventListener('click', (ev) => {
     const t = ev.target as HTMLElement
     if (t.closest('[data-area-fit-all]')) {
       fitAll()
+      return
+    }
+    const act = t.closest<HTMLElement>('button[data-act]')
+    if (act) {
+      onSearchAction(act)
+      return
+    }
+    const jr = t.closest<HTMLElement>('[data-jr-pick]')
+    if (jr) {
+      selectedJourney = Number(jr.dataset.jrPick)
+      renderPanel()
+      renderMap()
+      const j = journeys?.[selectedJourney]
+      if (j) fitPts(j.legs.flatMap(legPts))
       return
     }
     const btn = t.closest<HTMLElement>('[data-area]')
@@ -465,6 +869,53 @@ async function main(): Promise<void> {
     renderMap()
     renderPanel()
     fitArea()
+  })
+  panel.addEventListener('change', (ev) => {
+    const el = ev.target as HTMLInputElement | HTMLSelectElement
+    switch (el.dataset.act) {
+      case 'when-date':
+        when.date = el.value || nowRounded.date
+        void runSearch()
+        break
+      case 'when-time':
+        when.time = el.value || nowRounded.time
+        void runSearch()
+        break
+      case 'dest-stop': {
+        const m = /^f:([-\d.]+),([-\d.]+)$/.exec(el.value)
+        if (!m) return
+        const opt = (el as HTMLSelectElement).selectedOptions[0]
+        dest = { lat: Number(m[1]), lon: Number(m[2]), name: opt?.dataset.name ?? '選んだ場所' }
+        pickMode = 'origin'
+        void runSearch()
+        renderMap()
+        break
+      }
+      case 'pref':
+        repoPref = Number(el.value)
+        renderPanel()
+        if (repoPref > 0 && !repoList) {
+          listRepoFeeds()
+            .then((l) => {
+              repoList = l
+              renderPanel()
+            })
+            .catch(() => {
+              repoList = []
+              renderPanel()
+            })
+        }
+        break
+      case 'add-feed': {
+        const f = repoList?.filter((x) => x.prefId === repoPref)[Number(el.value)]
+        if (!f) return
+        if (!fixedFeeds().some((x) => x.org === f.org && x.feed === f.feed)) {
+          extraFeeds.push(f)
+          resetTimetable()
+        }
+        break
+      }
+    }
   })
 
   // CSS の適用が一瞬遅れて、この時点でも地図のコンテナが 0px のことがある

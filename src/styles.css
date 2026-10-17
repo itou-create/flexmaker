@@ -1134,3 +1134,103 @@ a.link-a:hover { background: var(--green-tint); }
   border-radius: 999px;
   border: 1px solid #4a80e0;
 }
+
+/* ── 住民ページ：乗りつぎ検索（どこへ行く？） ─────── */
+.jr-card .jr-dest { font-size: 17px; }
+.jr-dest-pick { display: grid; gap: 10px; }
+.jr-btn {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 17px;
+  border-radius: var(--radius);
+  background: var(--green);
+  color: #fff;
+  border-color: var(--green);
+  box-shadow: var(--shadow);
+}
+.jr-btn:hover { background: var(--green-deep); border-color: var(--green-deep); }
+.jr-or { display: block; font-size: 14px; color: var(--ink-2); }
+.jr-select, .jr-when input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: var(--ground);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+}
+.jr-select:focus-visible, .jr-when input:focus-visible { outline: none; border-color: var(--green); background: var(--surface); }
+.jr-when { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; font-size: 14px; color: var(--ink-2); }
+@media (max-width: 380px) { .jr-when { grid-template-columns: 1fr; } }
+.jr-mini {
+  padding: 4px 10px;
+  font-size: 13px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  margin-left: 4px;
+  vertical-align: middle;
+}
+.jr-picking { color: var(--green-deep); }
+
+.jr-list { display: grid; gap: 10px; margin: 10px 0 6px; }
+.jr { border: 2px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.jr:has(.jr-legs:not([hidden])) { border-color: var(--green); }
+.jr-head {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-weight: 500;
+}
+.jr-head:hover { background: var(--surface-2); transform: none; }
+.jr-times { font-size: 18px; }
+.jr-times b { font-size: 20px; }
+.jr-meta { font-size: 14px; color: var(--ink-2); margin-top: 2px; }
+.jr-kinds { margin-left: 6px; letter-spacing: 0.1em; }
+.jr-legs { list-style: none; margin: 0; padding: 6px 14px 12px; }
+.jr-leg {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 8px;
+  padding: 10px 0;
+  border-left: 4px solid var(--line-color, var(--line));
+  margin-left: 14px;
+  padding-left: 10px;
+}
+.jr-walk { --line-color: var(--line); }
+.jr-flex { --line-color: var(--pink); }
+.jr-bus { --line-color: var(--stop); }
+.jr-ico { font-size: 22px; line-height: 1.2; }
+.jr-body { min-width: 0; font-size: 16px; }
+.jr-main b { font-size: 17px; font-variant-numeric: tabular-nums; margin-right: 6px; }
+.jr-sub { font-size: 13.5px; color: var(--muted); margin: 2px 0; }
+.jr-route { font-size: 14px; color: var(--ink-2); margin-bottom: 4px; }
+.jr-chip {
+  display: inline-block;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--stop-soft);
+  color: var(--stop);
+  font-weight: 700;
+  font-size: 13px;
+}
+.jr-chip-flex { background: var(--pink-soft); color: var(--pink-ink); }
+.jr-note { font-size: 14px; color: var(--pink-ink); margin-top: 6px; }
+.jr-tel { display: inline-block; margin-left: 4px; font-weight: 700; }
+
+.jr-feeds { list-style: none; margin: 10px 0 0; padding: 0; font-size: 13.5px; color: var(--ink-2); }
+.jr-feeds li { margin: 3px 0; }
+.jr-feeds li.ok b { color: var(--ok); }
+.jr-feeds li.fail b { color: var(--ng); }
+.jr-add { margin-top: 10px; font-size: 14px; }
+.jr-add summary { cursor: pointer; color: var(--green-deep); font-weight: 700; }
+.jr-add-row { display: grid; gap: 8px; margin-top: 6px; color: var(--ink-2); }

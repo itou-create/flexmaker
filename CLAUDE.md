@@ -197,6 +197,19 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
 - **入力の自動保存（2026-10-03）**：`src/draft.ts`。localStorage に service + activeArea を毎回保存し、
   次に開いたとき続きから。「入力を白紙に戻す」で消す。サーバには何も送らない
 - **文言の共通化（2026-10-03）**：住民向けの言い回しは `src/viewText.ts`（check と flyer で共用）
+- **乗りつぎ検索（2026-10-17）**：住民ページの「どこへ行く？」カード。乗りたい場所（地図）と行き先
+  （地図タップ or 場所名の一覧）と日時を入れると、デマンド交通＋公表されている路線バス等を乗り継いだ
+  行き方を最大3件（到着順・乗りかえ少ない順のパレート）出し、選んだ経路を地図に描く（Google/Leaflet 両対応）。
+  - 固定路線は **国交省 GTFS データリポジトリ（gtfs-data.jp）** からブラウザが直接 zip を取る
+    （一覧 API・zip とも CORS 許可を 2026-10-17 に確認。サーバ不要）。ODPT 側は CORS 無しで直接は読めない
+  - 同梱 Flex データに紐づく相手は `src/transit/sources.ts` の `COMPANIONS`（瑞穂町＝コミュニティバス）。
+    利用者が都道府県→データで任意のフィードを足すこともできる（プレビュー表示でも使える）
+  - 探索は `src/transit/router.ts`（RAPTOR 方式・最大3乗車・徒歩乗継 500m・出発/到着から徒歩 1200m）。
+    Flex 区間は「時間帯内なら呼んだ時刻に乗れる」とみなし、迎え5分＋道のり換算 25km/h で所要を見積もる。
+    予約締切（当日◯分前＝きょうなら「いま＋◯分」以降、前日◯時＝締切超過なら不可）も判定に入れる
+  - 時刻表モデルは `src/transit/timetable.ts`（固定路線は pattern に束ね、Flex は FlexView から直接載せる）。
+    zip 展開は `src/gtfs/zipReader.ts`（DecompressionStream、依存ゼロ）→ ロードマップ3「zip のままの読み込み」の部品は完成
+  - 表示文言は `src/transit/journeyView.ts`。CC BY の出典表示は住民ページ末尾に自動で足す
 - **プレビュー連携（2026-09-26）**：作成画面の「住民ページで見る」→ `check.html#preview`。
   受け渡しは `src/preview.ts`（localStorage 経由・サーバ不要）。中身は flexWriter → flexReader を
   通した FlexView なので、zip に入るものと同じ解釈で表示される。区域だけの形態（乗り場ゼロ）は
@@ -211,8 +224,8 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
 2. **ODPT の残り14件をデモ用に同梱**：`scripts/convert-sample.mjs` で軽い JSON に変換して `public/data/` に置く
    （zip そのものはコミットしない）。CC BY 4.0 なので画面に出典（提供事業者・ODPT）を必ず表示する。
    ODPT のアクセスキーを画面側に書かない。複数データの切り替え UI もここで
-3. **zip のままの読み込み**：`flexReader` は「ファイル名 → テキスト」辞書までは読める。
-   ブラウザで zip を展開する部分（zip.ts は書く専用）が未実装
+3. **zip のままの読み込み**：展開部品 `src/gtfs/zipReader.ts` は 2026-10-17 にできた（乗りつぎ検索で使用中）。
+   残りは「Flex の zip を住民ページ／作成画面に読ませる入口」（ファイル選択 → readZip → flexReader）だけ
 4. GTFS-JP 第2編 2.5〜2.8 との突合（GTFS-JP 固有ファイルの要否。route_type は実データでは 3 が標準と確認済み）
 5. エリア間の便（区域→別の区域。田村の「滝根発船引まちなか行き」のような形。今の4形態に無いので
    zone_to_zone 形態の追加が要る。stop_times は乗車行=区域A・降車行=区域B で仕様上は書ける）

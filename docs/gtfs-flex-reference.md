@@ -136,6 +136,12 @@ Flex で増えるのは4ファイル。他は通常の GTFS と同じ。
 
 - **OpenTripPlanner** は Flex 対応（gtfs.org 記載）。ローカルで立てて経路が出るか確認できる
 - gtfs.org の Flex サンプル：https://gtfs.org/schedule/examples/flex/
+- **このツールの乗りつぎ検索（2026-10-17）**：`src/transit/`。路線バス等の固定路線は国交省 **GTFS データリポジトリ**
+  （https://www.gtfs-data.jp/ ）から取る。一覧 API `https://api.gtfs-data.jp/v2/feeds`（607件・2026-10-17）と
+  zip `https://api.gtfs-data.jp/v2/organizations/<org>/feeds/<feed>/files/feed.zip?rid=current`（S3 へ 302）は
+  **どちらも CORS 許可**でブラウザから直接読める。ODPT の `api-public.odpt.org` は CORS 無し。
+  瑞穂町はコミュニティバス（`mizuhotown/communitybus`）と Flex（`mizuhotown/DemandResponsiveTransport`）の両方を
+  リポジトリにも登録している。宗像市・平川市・川越町・紀の川市・安中市も路線バスを登録済み（Flex は ODPT 側のみ）
 
 ## 10. 先行ツール
 
