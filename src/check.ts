@@ -119,6 +119,8 @@ let ttFeedKeys = ''
 let feedStatus: { feed: RepoFeed; state: 'loading' | 'ok' | 'fail' | 'none'; detail?: string }[] = []
 const loadedFiles = new Map<string, Record<string, string>>()
 let journeys: Journey[] | null = null
+/** 見つからなかったときの理由（出発地・行き先が乗り場から遠いなど） */
+let noResultHint = ''
 let searching = false
 let selectedJourney = 0
 const nowRounded = ((): { date: string; time: string } => {
@@ -630,6 +632,7 @@ async function runSearch(): Promise<void> {
   const [h, mi] = when.time.split(':').map(Number)
   const date = new Date(y, mo - 1, d)
   journeys = search(t, { ...picked, name: '乗りたい場所' }, dest, { date, depSec: h * 3600 + mi * 60 })
+  noResultHint = journeys.length === 0 ? whyNoResult(t) : ''
   selectedJourney = 0
   searching = false
   renderPanel()
@@ -643,6 +646,20 @@ async function runSearch(): Promise<void> {
       if (card) panel.scrollTo({ top: Math.max(0, card.offsetTop - 8), behavior: 'smooth' })
     }
   }
+}
+
+/** 見つからなかった理由を言葉にする。乗り場までの距離が主な原因なので、それを先に伝える */
+function whyNoResult(t: Timetable): string {
+  if (!picked || !dest) return ''
+  const nearestM = (p: { lat: number; lon: number }): number =>
+    t.stops.reduce((best, st) => Math.min(best, distanceM(p.lat, p.lon, st.lat, st.lon)), Infinity)
+  const km = (m: number): string => (m >= 9500 ? String(Math.round(m / 1000)) : (m / 1000).toFixed(1))
+  const o = nearestM(picked)
+  const d = nearestM(dest)
+  const inZone = data.view.areas.some((a) => a.board.zones.some((z) => insideZone(picked!.lat, picked!.lon, z.rings)))
+  if (o > 1200 && !inZone) return `乗りたい場所から、いちばん近い乗り場まで約${km(o)}km あります（歩ける目安は 1.2km まで）。もう少し乗り場の近くを押してみてください。`
+  if (d > 1200) return `行き先から、いちばん近い乗り場・停留所まで約${km(d)}km あります（歩ける目安は 1.2km まで）。行き先を乗り場の近くにしてみてください。`
+  return ''
 }
 
 /** 行き先の候補（この画面のデマンド交通で降りられる場所＋読み込んだ路線バスの停留所） */
@@ -729,6 +746,7 @@ function searchCard(): string {
         <p class="check-small">所要時間や歩く時間は目安です。デマンド交通は呼んでから迎えが来るまでを約5分、走る速さを約25km/hとして見積もっています。乗りかえには2分の余裕を見ています。</p>`
     } else if (journeys) {
       result = `<p class="check-no check-big">この日時では、行き方が見つかりませんでした。</p>
+        ${noResultHint ? `<p>${esc(noResultHint)}</p>` : ''}
         ${pastNote}
         <p class="check-small">日にちや時刻を変えるか、別の行き先でお試しください。走っていない曜日や、予約の締切を過ぎている便は使えません。デマンド交通で行ける範囲の外かもしれません。</p>
         <p>${tomorrowBtn}</p>`
