@@ -34,6 +34,7 @@ npm run typecheck      # tsc --noEmit
 npm run build          # typecheck + vite build → dist/
 npm run preview        # dist/ をローカルで確認
 npm run fetch-samples  # ODPT の GTFS-Flex 15件（CC BY 4.0）を samples/ に落とす
+npm run build-feed-index  # gtfs-data.jp 全フィードの範囲索引 → public/data/feed-index.json（乗りつぎ検索の自動選択用。数分）
 ```
 
 テストは無い。動作確認は `npm run dev` で画面から「サンプルを読み込む」→「検証する」→「zip を出す」。
@@ -202,8 +203,12 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
   行き方を最大3件（到着順・乗りかえ少ない順のパレート）出し、選んだ経路を地図に描く（Google/Leaflet 両対応）。
   - 固定路線は **国交省 GTFS データリポジトリ（gtfs-data.jp）** からブラウザが直接 zip を取る
     （一覧 API・zip とも CORS 許可を 2026-10-17 に確認。サーバ不要）。ODPT 側は CORS 無しで直接は読めない
-  - 同梱 Flex データに紐づく相手は `src/transit/sources.ts` の `COMPANIONS`（瑞穂町＝コミュニティバス）。
-    利用者が都道府県→データで任意のフィードを足すこともできる（プレビュー表示でも使える）
+  - **利用者にデータは選ばせない**（伊藤さん指示 2026-10-17）。同梱の索引 `public/data/feed-index.json`
+    （全フィードの停留所の範囲 bbox・停留所数・zip サイズ・Flex 印。552件）から、見ているエリアの乗り場＋出発地＋行き先を
+    囲む箱（余白 3km）に重なるフィードを近い順・小さい順に自動で選ぶ（最大6件・合計 12MB まで、Flex 印は除く）。
+    選定は `pickNearbyFeeds`（`src/transit/sources.ts`）、索引の作成は `npm run build-feed-index`
+    （`scripts/build-feed-index.mjs`。zip の末尾と stops.txt だけを HTTP Range で取るので数分で済む。
+    フィードの追加・廃止に追従するため、月1回程度は作り直してコミットする）
   - 探索は `src/transit/router.ts`（RAPTOR 方式・最大3乗車・徒歩乗継 500m・出発/到着から徒歩 1200m）。
     Flex 区間は「時間帯内なら呼んだ時刻に乗れる」とみなし、迎え5分＋道のり換算 25km/h で所要を見積もる。
     予約締切（当日◯分前＝きょうなら「いま＋◯分」以降、前日◯時＝締切超過なら不可）も判定に入れる

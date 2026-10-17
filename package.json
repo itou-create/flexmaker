@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
-    "fetch-samples": "node scripts/fetch-samples.mjs"
+    "fetch-samples": "node scripts/fetch-samples.mjs",
+    "build-feed-index": "node scripts/build-feed-index.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4"

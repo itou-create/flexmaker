@@ -4,10 +4,15 @@
 // ブラウザから直接読める（CORS 許可。2026-10-17 に確認）。サーバを置かずに済む。
 // Flex 側のデータ（同梱 JSON／作成中プレビュー）と、ここで取る路線バス等を同じ時刻表に載せる。
 //
+// 利用者にデータを選ばせない：同梱の索引 public/data/feed-index.json
+// （scripts/build-feed-index.mjs が全フィードの停留所の範囲を調べたもの）から、
+// 出発地・行き先・いま見ているエリアの近くにあるフィードを自動で選ぶ。
+//
 // ODPT（api-public.odpt.org）側は CORS が無いのでブラウザから直接は読めない。
 // Flex データは scripts/convert-sample.mjs で変換した同梱 JSON を使う（従来どおり）。
 
 import { readZip } from '../gtfs/zipReader.ts'
+import { distanceM } from './timetable.ts'
 
 export interface RepoFeed {
   /** gtfs-data.jp の organization_id */
@@ -22,24 +27,23 @@ export interface RepoFeed {
   licenseUrl?: string
 }
 
-/** 同梱の Flex データセット ID → 乗り継ぎ相手として自動で読む固定路線 */
-export const COMPANIONS: Record<string, RepoFeed[]> = {
-  mizuho_town_mizuho_area: [
-    {
-      org: 'mizuhotown',
-      feed: 'communitybus',
-      label: '瑞穂町コミュニティバス',
-      provider: '瑞穂町',
-      license: 'CC BY 4.0',
-      licenseUrl: 'https://creativecommons.org/licenses/by/4.0/deed.ja',
-    },
-  ],
+/** 索引の1件。bbox は [西端の経度, 南端の緯度, 東端の経度, 北端の緯度] */
+export interface IndexedFeed extends RepoFeed {
+  prefId: number
+  end?: string
+  bbox: [number, number, number, number]
+  stops: number
+  zipBytes: number
+  /** 予約制（GTFS-Flex）のフィード。時刻表としては使えない */
+  flex?: boolean
 }
 
 export const REPO_TOP_URL = 'https://www.gtfs-data.jp/'
 
 export const repoZipUrl = (f: RepoFeed): string =>
   `https://api.gtfs-data.jp/v2/organizations/${encodeURIComponent(f.org)}/feeds/${encodeURIComponent(f.feed)}/files/feed.zip?rid=current`
+
+export const feedKey = (f: RepoFeed): string => `${f.org}/${f.feed}`
 
 /** リポジトリから zip を取って「ファイル名 → テキスト」にする */
 export async function loadRepoFeed(f: RepoFeed): Promise<Record<string, string>> {
@@ -48,63 +52,82 @@ export async function loadRepoFeed(f: RepoFeed): Promise<Record<string, string>>
   return readZip(await res.arrayBuffer())
 }
 
-/** 利用者が手元の GTFS zip を読ませたとき */
-export async function loadLocalZip(file: File): Promise<Record<string, string>> {
-  return readZip(await file.arrayBuffer())
+let indexCache: Promise<IndexedFeed[]> | null = null
+
+/** 同梱の索引を読む（失敗したら空。乗りつぎはデマンド交通だけで調べる） */
+export function loadFeedIndex(): Promise<IndexedFeed[]> {
+  if (!indexCache) {
+    indexCache = fetch('./data/feed-index.json')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((j: { feeds?: IndexedFeed[] }) => j.feeds ?? [])
+      .catch(() => [])
+  }
+  return indexCache
 }
 
-export const PREF_NAMES = [
-  '',
-  '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
-  '茨城県', '栃木県', '群馬県', '埼玉県', '千葉県', '東京都', '神奈川県',
-  '新潟県', '富山県', '石川県', '福井県', '山梨県', '長野県', '岐阜県',
-  '静岡県', '愛知県', '三重県', '滋賀県', '京都府', '大阪府', '兵庫県',
-  '奈良県', '和歌山県', '鳥取県', '島根県', '岡山県', '広島県', '山口県',
-  '徳島県', '香川県', '愛媛県', '高知県', '福岡県', '佐賀県', '長崎県',
-  '熊本県', '大分県', '宮崎県', '鹿児島県', '沖縄県',
-]
-
-export interface RepoFeedInfo extends RepoFeed {
-  prefId: number
-  /** YYYY-MM-DD */
-  end?: string
-  discontinued: boolean
+export interface PickOptions {
+  /** 範囲の外側に見る余白（m）。既定 3000 */
+  marginM?: number
+  /** 読み込むフィード数の上限。既定 6 */
+  maxFeeds?: number
+  /** 読み込む zip の合計バイト数の上限。既定 12MB（スマホ回線を考えて） */
+  maxBytes?: number
+  /** 必ず入れるもの（同梱データに紐づく相手など） */
+  always?: RepoFeed[]
 }
 
-interface ApiFeed {
-  organization_id: string
-  organization_name: string
-  feed_id: string
-  feed_name: string
-  feed_pref_id: number | string
-  feed_license?: string
-  feed_license_url?: string
-  latest_feed_end_date?: string
-  feed_is_discontinued?: boolean
-}
+/**
+ * 地点の集まり（出発地・行き先・エリアの乗り場など）を囲む箱に重なるフィードを選ぶ。
+ * 近い順・小さい順に、上限の件数と容量まで。地点が無ければ空。
+ */
+export function pickNearbyFeeds(index: IndexedFeed[], pts: { lat: number; lon: number }[], opts: PickOptions = {}): IndexedFeed[] {
+  const marginM = opts.marginM ?? 3000
+  const maxFeeds = opts.maxFeeds ?? 6
+  const maxBytes = opts.maxBytes ?? 12 * 1024 * 1024
+  const chosen: IndexedFeed[] = []
+  let bytes = 0
+  for (const a of opts.always ?? []) {
+    const f = index.find((x) => x.org === a.org && x.feed === a.feed)
+    if (f) {
+      chosen.push(f)
+      bytes += f.zipBytes
+    }
+  }
+  if (pts.length === 0) return chosen
 
-let feedListCache: RepoFeedInfo[] | null = null
+  let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity
+  for (const p of pts) {
+    if (p.lat < minLat) minLat = p.lat
+    if (p.lat > maxLat) maxLat = p.lat
+    if (p.lon < minLon) minLon = p.lon
+    if (p.lon > maxLon) maxLon = p.lon
+  }
+  const dLat = marginM / 111000
+  const dLon = marginM / (111000 * Math.cos(((minLat + maxLat) / 2) * (Math.PI / 180)))
+  minLat -= dLat
+  maxLat += dLat
+  minLon -= dLon
+  maxLon += dLon
+  const cLat = (minLat + maxLat) / 2
+  const cLon = (minLon + maxLon) / 2
 
-/** リポジトリに登録されている全フィード（提供終了を除く）。都道府県で絞って選ばせる用 */
-export async function listRepoFeeds(): Promise<RepoFeedInfo[]> {
-  if (feedListCache) return feedListCache
-  const res = await fetch('https://api.gtfs-data.jp/v2/feeds')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = (await res.json()) as { body?: ApiFeed[] } | ApiFeed[]
-  const body = Array.isArray(json) ? json : (json.body ?? [])
-  feedListCache = body
-    .filter((f) => !f.feed_is_discontinued)
-    .map((f) => ({
-      org: f.organization_id,
-      feed: f.feed_id,
-      label: f.feed_name,
-      provider: f.organization_name,
-      license: f.feed_license,
-      licenseUrl: f.feed_license_url,
-      prefId: Number(f.feed_pref_id),
-      end: f.latest_feed_end_date,
-      discontinued: !!f.feed_is_discontinued,
-    }))
-    .sort((a, b) => a.prefId - b.prefId || a.provider.localeCompare(b.provider, 'ja') || a.label.localeCompare(b.label, 'ja'))
-  return feedListCache
+  const hits = index
+    .filter((f) => !chosen.includes(f))
+    .filter((f) => f.bbox[0] <= maxLon && f.bbox[2] >= minLon && f.bbox[1] <= maxLat && f.bbox[3] >= minLat)
+    .map((f) => {
+      // 箱の中心までの距離と、箱の大きさ（広域事業者ほど後回し）
+      const fc = { lat: (f.bbox[1] + f.bbox[3]) / 2, lon: (f.bbox[0] + f.bbox[2]) / 2 }
+      const span = distanceM(f.bbox[1], f.bbox[0], f.bbox[3], f.bbox[2])
+      return { f, span, score: distanceM(cLat, cLon, fc.lat, fc.lon) + span * 0.5 }
+    })
+    // 県をまたぐ高速バスなどは、箱が重なっても近所の停留所が無いことが多いので外す
+    .filter((h) => h.span <= 150000)
+    .sort((a, b) => a.score - b.score)
+  for (const { f } of hits) {
+    if (chosen.length >= maxFeeds) break
+    if (bytes + f.zipBytes > maxBytes) continue
+    chosen.push(f)
+    bytes += f.zipBytes
+  }
+  return chosen
 }

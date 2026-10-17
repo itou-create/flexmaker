@@ -27,15 +27,7 @@ import {
 } from './transit/timetable.ts'
 import { search, type Journey, type Leg, type Pt } from './transit/router.ts'
 import { journeysHtml } from './transit/journeyView.ts'
-import {
-  COMPANIONS,
-  PREF_NAMES,
-  REPO_TOP_URL,
-  listRepoFeeds,
-  loadRepoFeed,
-  type RepoFeed,
-  type RepoFeedInfo,
-} from './transit/sources.ts'
+import { REPO_TOP_URL, feedKey, loadFeedIndex, loadRepoFeed, pickNearbyFeeds, type IndexedFeed, type RepoFeed } from './transit/sources.ts'
 
 interface DemoSource {
   municipality: string
@@ -115,16 +107,14 @@ let pickMode: 'origin' | 'dest' = 'origin'
 let dest: Pt | null = null
 let tt: Timetable | null = null
 let ttBuilding: Promise<Timetable> | null = null
-/** 読み込んだ固定路線の状態（表示用） */
-let feedStatus: { feed: RepoFeed; state: 'loading' | 'ok' | 'fail'; detail?: string }[] = []
-/** 利用者が「路線バスのデータを足す」で追加したもの */
-let extraFeeds: RepoFeed[] = []
+/** いまの時刻表に入れた固定路線の組（キーの並び）。場所が変わって組が変われば組み直す */
+let ttFeedKeys = ''
+/** 読み込んだ固定路線の状態（表示用）。'none' は時刻表の無いデータ（デマンド等）で読み飛ばしたもの */
+let feedStatus: { feed: RepoFeed; state: 'loading' | 'ok' | 'fail' | 'none'; detail?: string }[] = []
 const loadedFiles = new Map<string, Record<string, string>>()
 let journeys: Journey[] | null = null
 let searching = false
 let selectedJourney = 0
-let repoList: RepoFeedInfo[] | null = null
-let repoPref = 0
 const nowRounded = ((): { date: string; time: string } => {
   const d = new Date(Date.now() + 5 * 60000)
   d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0)
@@ -463,19 +453,26 @@ function pickedCard(): string {
 
 // ── 乗り継ぎ検索 ──────────────────────────────
 
-function datasetId(): string | null {
-  const u = data.source?.datasetUrl
-  return u ? (u.replace(/\/+$/, '').split('/').pop() ?? null) : null
+/** 近くのフィードを探す範囲：いま見ているエリアの乗り場・区域に、出発地と行き先を足した地点の集まり */
+function searchPts(): { lat: number; lon: number }[] {
+  const pts: { lat: number; lon: number }[] = []
+  for (const st of [...area.board.stops, ...area.alight.stops]) pts.push({ lat: st.lat, lon: st.lon })
+  for (const z of [...area.board.zones, ...area.alight.zones]) for (const ring of z.rings) for (const [lon, lat] of ring) pts.push({ lat, lon })
+  if (picked) pts.push(picked)
+  if (dest) pts.push(dest)
+  return pts
 }
 
-/** この画面で使う固定路線（同梱データに紐づく分＋利用者が足した分） */
-function fixedFeeds(): RepoFeed[] {
-  const id = datasetId()
-  const base = id ? (COMPANIONS[id] ?? []) : []
-  return [...base, ...extraFeeds.filter((e) => !base.some((b) => b.org === e.org && b.feed === e.feed))]
+/**
+ * この場所で使う固定路線を索引から自動で選ぶ（利用者は選ばない）。
+ * デマンド（Flex）のフィードは時刻表にならないので除く。
+ */
+async function fixedFeeds(): Promise<IndexedFeed[]> {
+  const index = (await loadFeedIndex()).filter((f) => !f.flex)
+  return pickNearbyFeeds(index, searchPts())
 }
 
-async function buildTimetable(): Promise<Timetable> {
+async function buildTimetable(feeds: IndexedFeed[]): Promise<Timetable> {
   const t = createTimetable()
   const s = data.source
   addFlexView(t, data.view, {
@@ -485,10 +482,11 @@ async function buildTimetable(): Promise<Timetable> {
     license: s?.license,
     licenseUrl: s?.licenseUrl,
   })
-  feedStatus = fixedFeeds().map((feed) => ({ feed, state: 'loading' as const }))
+  feedStatus = feeds.map((feed) => ({ feed, state: 'loading' as const }))
   renderPanel()
+  // 近い順に並んでいるので順に読む。読めたものから時刻表に入る
   for (const st of feedStatus) {
-    const key = `${st.feed.org}/${st.feed.feed}`
+    const key = feedKey(st.feed)
     try {
       let files = loadedFiles.get(key)
       if (!files) {
@@ -502,8 +500,8 @@ async function buildTimetable(): Promise<Timetable> {
         license: st.feed.license,
         licenseUrl: st.feed.licenseUrl,
       })
-      st.state = n > 0 ? 'ok' : 'fail'
-      st.detail = n > 0 ? `${n}便` : '時刻表が読めませんでした'
+      st.state = n > 0 ? 'ok' : 'none'
+      st.detail = n > 0 ? `${n}便` : '時刻表なし'
     } catch (e) {
       st.state = 'fail'
       st.detail = e instanceof Error ? e.message : String(e)
@@ -511,22 +509,24 @@ async function buildTimetable(): Promise<Timetable> {
     renderPanel()
   }
   buildTransfers(t)
-  tt = t
   return t
 }
 
+/** いまの場所に合う時刻表を返す。必要なフィードの組が変わっていれば組み直す */
 function ensureTimetable(): Promise<Timetable> {
-  if (tt) return Promise.resolve(tt)
-  if (!ttBuilding) ttBuilding = buildTimetable()
+  if (ttBuilding) return ttBuilding
+  ttBuilding = (async () => {
+    const feeds = await fixedFeeds()
+    const keys = feeds.map(feedKey).join('|')
+    if (tt && keys === ttFeedKeys) return tt
+    const t = await buildTimetable(feeds)
+    tt = t
+    ttFeedKeys = keys
+    return t
+  })().finally(() => {
+    ttBuilding = null
+  })
   return ttBuilding
-}
-
-/** 固定路線を足したり外したりしたら時刻表を組み直す */
-function resetTimetable(): void {
-  tt = null
-  ttBuilding = null
-  journeys = null
-  void ensureTimetable().then(() => (dest ? runSearch() : undefined))
 }
 
 async function runSearch(): Promise<void> {
@@ -582,35 +582,20 @@ function destOptions(): string {
     .join('')
 }
 
+/** 乗りつぎに使っている時刻表（自動で選んだもの）を小さく示す。時刻表の無いデータは出さない */
 function feedStatusHtml(): string {
-  const lines = feedStatus.map((st) => {
+  const shown = feedStatus.filter((st) => st.state !== 'none')
+  if (shown.length === 0) {
+    return feedStatus.length === 0 && tt
+      ? `<p class="check-small">この近くに公表されている路線バスの時刻表は見つからなかったので、デマンド交通だけで調べています。</p>`
+      : ''
+  }
+  const lines = shown.map((st) => {
     const mark = st.state === 'ok' ? '✓' : st.state === 'fail' ? '✕' : '…'
-    const txt = st.state === 'loading' ? '読み込んでいます' : st.state === 'ok' ? `読み込みました（${st.detail}）` : '読み込めませんでした'
-    const removable = extraFeeds.some((e) => e.org === st.feed.org && e.feed === st.feed.feed)
-    return `<li class="${st.state}"><b>${mark}</b> ${esc(st.feed.label)}：${txt}${
-      removable ? ` <button type="button" class="jr-mini" data-act="remove-feed" data-key="${esc(st.feed.org)}/${esc(st.feed.feed)}">外す</button>` : ''
-    }</li>`
+    const txt = st.state === 'loading' ? '読み込んでいます' : st.state === 'ok' ? `（${st.detail}）` : '読み込めませんでした'
+    return `<li class="${st.state}"><b>${mark}</b> ${esc(st.feed.label)}${txt}</li>`
   })
-  return lines.length ? `<ul class="jr-feeds">${lines.join('')}</ul>` : ''
-}
-
-function addFeedHtml(): string {
-  const list = repoList
-  const prefOptions = PREF_NAMES.map((n, i) => (i === 0 ? '' : `<option value="${i}" ${i === repoPref ? 'selected' : ''}>${n}</option>`)).join('')
-  const feedsInPref = list ? list.filter((f) => f.prefId === repoPref) : []
-  const feedSelect = list
-    ? `<label>データ <select data-act="add-feed" class="jr-select"><option value="">選んでください（${feedsInPref.length}件）</option>${feedsInPref
-        .map((f, i) => `<option value="${i}">${esc(f.provider)}　${esc(f.label)}</option>`)
-        .join('')}</select></label>`
-    : `<span class="check-small">一覧を読み込んでいます…</span>`
-  return `<details class="jr-add" ${extraFeeds.length || repoList ? 'open' : ''}>
-    <summary>路線バスなどの時刻表を足す（公表されている GTFS）</summary>
-    <p class="check-small">国の <a href="${REPO_TOP_URL}" target="_blank" rel="noopener">GTFS データリポジトリ</a>に公開されているデータを、このページに読み込んで乗り継ぎに使えます。</p>
-    <div class="jr-add-row">
-      <label>都道府県 <select data-act="pref" class="jr-select"><option value="0">選んでください</option>${prefOptions}</select></label>
-      ${repoPref > 0 ? feedSelect : ''}
-    </div>
-  </details>`
+  return `<details class="jr-add"><summary>乗りつぎに使っている時刻表（近くのものを自動で選んでいます）</summary><ul class="jr-feeds">${lines.join('')}</ul></details>`
 }
 
 function searchCard(): string {
@@ -651,18 +636,13 @@ function searchCard(): string {
         <p>${tomorrowBtn}</p>`
     }
   }
-  const fixedNote =
-    fixedFeeds().length === 0 && !repoList
-      ? `<p class="check-small">いまはデマンド交通だけで調べます。路線バスなどの時刻表を足すと、乗り継いだ行き方も出ます。</p>`
-      : ''
   return `<section class="check-card jr-card">
     <h2>どこへ行く？（乗りつぎ検索）</h2>
+    <p class="check-small">デマンド交通と、近くの路線バスなど（公表されている時刻表）を乗り継いで行けるかを調べます。</p>
     ${destLine}
     ${dest || pickMode === 'dest' ? whenLine : ''}
     ${result}
     ${feedStatusHtml()}
-    ${fixedNote}
-    ${addFeedHtml()}
   </section>`
 }
 
@@ -795,13 +775,6 @@ function onSearchAction(btn: HTMLElement): void {
       void runSearch()
       break
     }
-    case 'remove-feed': {
-      const key = btn.dataset.key
-      extraFeeds = extraFeeds.filter((e) => `${e.org}/${e.feed}` !== key)
-      resetTimetable()
-      renderPanel()
-      break
-    }
   }
 }
 
@@ -869,6 +842,7 @@ async function main(): Promise<void> {
     renderMap()
     renderPanel()
     fitArea()
+    void ensureTimetable().then(() => (dest ? runSearch() : renderPanel()))
   })
   panel.addEventListener('change', (ev) => {
     const el = ev.target as HTMLInputElement | HTMLSelectElement
@@ -889,30 +863,6 @@ async function main(): Promise<void> {
         pickMode = 'origin'
         void runSearch()
         renderMap()
-        break
-      }
-      case 'pref':
-        repoPref = Number(el.value)
-        renderPanel()
-        if (repoPref > 0 && !repoList) {
-          listRepoFeeds()
-            .then((l) => {
-              repoList = l
-              renderPanel()
-            })
-            .catch(() => {
-              repoList = []
-              renderPanel()
-            })
-        }
-        break
-      case 'add-feed': {
-        const f = repoList?.filter((x) => x.prefId === repoPref)[Number(el.value)]
-        if (!f) return
-        if (!fixedFeeds().some((x) => x.org === f.org && x.feed === f.feed)) {
-          extraFeeds.push(f)
-          resetTimetable()
-        }
         break
       }
     }
