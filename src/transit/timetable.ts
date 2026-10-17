@@ -37,6 +37,8 @@ export interface TTrip {
   /** 停留所ごとの到着・出発（0時からの秒） */
   arr: number[]
   dep: number[]
+  /** 走る道筋（tt.shapes のキー）。無ければ停留所を直線で結ぶ */
+  shapeId?: string
 }
 
 export interface TPattern {
@@ -93,6 +95,8 @@ export interface Timetable {
   sources: TSource[]
   /** 徒歩で移れる停留所（buildTransfers で作る） */
   transfers: { to: number; sec: number }[][]
+  /** 便の走る道筋（shapes.txt）。キーは "フィード番号:shape_id"、値は [緯度, 経度] の列 */
+  shapes: Map<string, [number, number][]>
 }
 
 // ── 単位と目安 ─────────────────────────────────
@@ -159,6 +163,7 @@ export function createTimetable(): Timetable {
     calendars: [],
     sources: [],
     transfers: [],
+    shapes: new Map(),
   }
 }
 
@@ -228,9 +233,24 @@ export function addFixedFeed(tt: Timetable, files: Record<string, string>, sourc
       textColor: r.route_text_color ? `#${r.route_text_color}` : undefined,
     })
   }
-  const trips = new Map<string, { routeId: string; serviceId: string; headsign: string }>()
+  const trips = new Map<string, { routeId: string; serviceId: string; headsign: string; shapeId?: string }>()
   for (const r of table('trips.txt')) {
-    trips.set(r.trip_id, { routeId: r.route_id, serviceId: r.service_id, headsign: r.trip_headsign ?? '' })
+    trips.set(r.trip_id, { routeId: r.route_id, serviceId: r.service_id, headsign: r.trip_headsign ?? '', shapeId: r.shape_id || undefined })
+  }
+
+  // 走る道筋（shapes.txt）。地図に道路に沿った線を描くためだけに使う
+  const shapeRows = new Map<string, { seq: number; lat: number; lon: number }[]>()
+  for (const r of table('shapes.txt')) {
+    const lat = Number(r.shape_pt_lat)
+    const lon = Number(r.shape_pt_lon)
+    if (!r.shape_id || !Number.isFinite(lat) || !Number.isFinite(lon)) continue
+    const list = shapeRows.get(r.shape_id) ?? []
+    list.push({ seq: Number(r.shape_pt_sequence), lat, lon })
+    shapeRows.set(r.shape_id, list)
+  }
+  for (const [id, rows] of shapeRows) {
+    rows.sort((a, b) => a.seq - b.seq)
+    tt.shapes.set(`${feed}:${id}`, rows.map((x) => [x.lat, x.lon] as [number, number]))
   }
 
   // stop_times を便ごとにまとめる
@@ -282,6 +302,7 @@ export function addFixedFeed(tt: Timetable, files: Record<string, string>, sourc
       headsign: info.headsign,
       arr: rows.map((x) => x.arr),
       dep: rows.map((x) => x.dep),
+      shapeId: info.shapeId && tt.shapes.has(`${feed}:${info.shapeId}`) ? `${feed}:${info.shapeId}` : undefined,
     })
     count++
   }
@@ -355,4 +376,34 @@ export function buildTransfers(tt: Timetable, maxM = 500): void {
     }
   }
   tt.transfers = out
+}
+
+/**
+ * バス区間の道筋（[緯度, 経度] の列）。shapes があれば、乗る停留所と降りる停留所に
+ * いちばん近い形状点の間を切り出す。無ければ途中の停留所を直線で結ぶ。
+ */
+export function legPath(tt: Timetable, p: TPattern, trip: TTrip, fromIdx: number, toIdx: number): [number, number][] {
+  const viaStops = (): [number, number][] => p.stops.slice(fromIdx, toIdx + 1).map((s) => [tt.stops[s].lat, tt.stops[s].lon])
+  const shape = trip.shapeId ? tt.shapes.get(trip.shapeId) : undefined
+  if (!shape || shape.length < 2) return viaStops()
+  const nearest = (s: number, startAt: number): number => {
+    const st = tt.stops[s]
+    let best = startAt
+    let bestD = Infinity
+    for (let i = startAt; i < shape.length; i++) {
+      const d = distanceM(st.lat, st.lon, shape[i][0], shape[i][1])
+      if (d < bestD) {
+        bestD = d
+        best = i
+      }
+    }
+    return bestD <= 300 ? best : -1 // 形状と停留所が 300m 以上離れていたら形状を信用しない
+  }
+  const a = nearest(p.stops[fromIdx], 0)
+  if (a < 0) return viaStops()
+  const b = nearest(p.stops[toIdx], a)
+  if (b < 0 || b <= a) return viaStops()
+  const from = tt.stops[p.stops[fromIdx]]
+  const to = tt.stops[p.stops[toIdx]]
+  return [[from.lat, from.lon], ...shape.slice(a, b + 1), [to.lat, to.lon]]
 }

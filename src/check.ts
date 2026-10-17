@@ -23,6 +23,7 @@ import {
   addFlexView,
   buildTransfers,
   createTimetable,
+  legPath,
   type Timetable,
 } from './transit/timetable.ts'
 import { search, type Journey, type Leg, type Pt } from './transit/router.ts'
@@ -88,6 +89,11 @@ app.innerHTML = `
     <div class="check-map-wrap">
       <div id="map" class="map" role="application" aria-label="地図"></div>
       <div class="check-map-hint" id="map-hint">地図の、自宅など「乗りたい場所」を指で押してください</div>
+      <div class="map-legend" id="map-legend" hidden>
+        <span><i class="lg lg-bus"></i>バス</span>
+        <span><i class="lg lg-flex"></i>デマンド</span>
+        <span><i class="lg lg-walk"></i>歩く</span>
+      </div>
     </div>
     <div id="check-panel" class="check-panel"></div>
   </div>
@@ -288,36 +294,102 @@ function renderGoogleMap(): void {
   if (j) {
     for (const leg of j.legs) {
       const st = legStyle(leg)
+      const path = legPts(leg).map(([lat, lng]) => ({ lat, lng }))
+      if (leg.kind === 'walk') {
+        // 徒歩は点々（丸を並べる）。点線の icon は細くて見えないことがあるので丸にする
+        gLines.push(
+          new g.maps.Polyline({
+            map: gmap,
+            path,
+            clickable: false,
+            strokeOpacity: 0,
+            zIndex: 6,
+            icons: [{ icon: { path: g.maps.SymbolPath.CIRCLE, scale: 3, fillColor: st.color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 1 }, offset: '0', repeat: '12px' }],
+          }),
+        )
+        continue
+      }
+      // 縁取り（白）→ 本体（路線色）の2本重ね。薄い路線色でも地図から浮く
+      gLines.push(new g.maps.Polyline({ map: gmap, path, clickable: false, strokeColor: '#ffffff', strokeWeight: st.weight + 6, strokeOpacity: 0.9, zIndex: 4 }))
+      gLines.push(new g.maps.Polyline({ map: gmap, path, clickable: false, strokeColor: '#1f2a24', strokeWeight: st.weight + 3, strokeOpacity: 0.55, zIndex: 5 }))
       gLines.push(
         new g.maps.Polyline({
           map: gmap,
-          path: legPts(leg).map(([lat, lng]) => ({ lat, lng })),
+          path,
           clickable: false,
           strokeColor: st.color,
           strokeWeight: st.weight,
-          strokeOpacity: st.dash ? 0 : 0.9,
-          zIndex: 5,
+          strokeOpacity: st.dash ? 0 : 1,
+          zIndex: 6,
           icons: st.dash
-            ? [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.9, strokeColor: st.color, strokeWeight: st.weight, scale: 3 }, offset: '0', repeat: '14px' }]
+            ? [{ icon: { path: 'M 0,-2 0,2', strokeOpacity: 1, strokeColor: st.color, strokeWeight: st.weight, scale: 3 }, offset: '0', repeat: '18px' }]
             : undefined,
         }),
       )
     }
+    // 乗る・降りる場所に番号の印
+    for (const m of journeyMarks(j)) {
+      gLines.push(
+        new g.maps.Marker({
+          map: gmap,
+          position: { lat: m.lat, lng: m.lon },
+          title: m.title,
+          clickable: false,
+          zIndex: 20,
+          label: { text: String(m.n), color: '#fff', fontWeight: '700', fontSize: '13px' },
+          icon: { path: g.maps.SymbolPath.CIRCLE, scale: 12, fillColor: m.color, fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2.5 },
+        }),
+      )
+    }
   }
+  document.getElementById('map-legend')?.toggleAttribute('hidden', !j)
 }
 
-/** 経路の区間ごとの線の見た目（両エンジン共通）。徒歩＝点線の灰、デマンド＝点線の桃、バス＝路線色の実線 */
+/** 経路の乗る場所・降りる場所（番号つきの印）。徒歩区間の端は乗り物の端と重なるので乗り物側だけ */
+function journeyMarks(j: Journey): { lat: number; lon: number; n: number; title: string; color: string }[] {
+  const out: { lat: number; lon: number; n: number; title: string; color: string }[] = []
+  let n = 1
+  for (const leg of j.legs) {
+    if (leg.kind === 'walk') continue
+    const pts = legPts(leg)
+    const color = leg.kind === 'bus' ? '#4a80e0' : '#b0416f'
+    const [fromName, toName] =
+      leg.kind === 'bus'
+        ? [tt!.stops[leg.pattern.stops[leg.fromIdx]].name, tt!.stops[leg.pattern.stops[leg.toIdx]].name]
+        : [leg.from.name ?? '乗る場所', leg.to.name ?? '降りる場所']
+    out.push({ lat: pts[0][0], lon: pts[0][1], n: n++, title: `${fromName}で乗る`, color })
+    const last = pts[pts.length - 1]
+    out.push({ lat: last[0], lon: last[1], n: n++, title: `${toName}で降りる`, color })
+  }
+  return out
+}
+
+/** 経路の区間ごとの線の見た目（両エンジン共通）。徒歩＝点々の灰、デマンド＝破線の桃、バス＝路線色の実線 */
 function legStyle(leg: Leg): { color: string; weight: number; dash: boolean } {
-  if (leg.kind === 'walk') return { color: '#7d9184', weight: 4, dash: true }
-  if (leg.kind === 'flex') return { color: '#b0416f', weight: 5, dash: true }
-  return { color: leg.pattern.color ?? '#4a80e0', weight: 6, dash: false }
+  if (leg.kind === 'walk') return { color: '#4f6656', weight: 4, dash: true }
+  if (leg.kind === 'flex') return { color: '#d2437f', weight: 6, dash: true }
+  return { color: readableRouteColor(leg.pattern.color), weight: 7, dash: false }
 }
 
-/** 区間を地図に描くための [緯度, 経度] の列 */
-function legPts(leg: Leg): [number, number][] {
-  if (leg.kind === 'bus') {
-    return leg.pattern.stops.slice(leg.fromIdx, leg.toIdx + 1).map((s) => [tt!.stops[s].lat, tt!.stops[s].lon])
+/** 路線色が薄すぎる（白地図で読めない）ときは少し濃くする */
+function readableRouteColor(hex: string | undefined): string {
+  if (!hex) return '#4a80e0'
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex)
+  if (!m) return '#4a80e0'
+  let [r, g, b] = [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)]
+  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  if (lum > 180) {
+    const k = 170 / lum
+    r = Math.round(r * k)
+    g = Math.round(g * k)
+    b = Math.round(b * k)
   }
+  return `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`
+}
+
+/** 区間を地図に描くための [緯度, 経度] の列。バスは shapes があれば道路に沿う */
+function legPts(leg: Leg): [number, number][] {
+  if (leg.kind === 'bus') return legPath(tt!, leg.pattern, leg.trip, leg.fromIdx, leg.toIdx)
   return [
     [leg.from.lat, leg.from.lon],
     [leg.to.lat, leg.to.lon],
@@ -383,17 +455,36 @@ function renderLeafletMap(): void {
   if (j) {
     for (const leg of j.legs) {
       const st = legStyle(leg)
+      const path = legPts(leg) as L.LatLngExpression[]
+      if (leg.kind === 'walk') {
+        lLines.push(L.polyline(path, { color: '#fff', weight: st.weight + 4, opacity: 0.9, dashArray: '1 10', lineCap: 'round' }).addTo(lmap))
+        lLines.push(L.polyline(path, { color: st.color, weight: st.weight, opacity: 1, dashArray: '1 10', lineCap: 'round' }).addTo(lmap))
+        continue
+      }
+      // 縁取り（白）→ 影（濃灰）→ 本体（路線色）
+      lLines.push(L.polyline(path, { color: '#fff', weight: st.weight + 6, opacity: 0.9, lineCap: 'round', lineJoin: 'round' }).addTo(lmap))
+      lLines.push(L.polyline(path, { color: '#1f2a24', weight: st.weight + 3, opacity: 0.55, lineCap: 'round', lineJoin: 'round' }).addTo(lmap))
       lLines.push(
-        L.polyline(legPts(leg) as L.LatLngExpression[], {
+        L.polyline(path, {
           color: st.color,
           weight: st.weight,
-          opacity: 0.9,
-          dashArray: st.dash ? '2 10' : undefined,
+          opacity: 1,
+          dashArray: st.dash ? '10 12' : undefined,
           lineCap: 'round',
+          lineJoin: 'round',
         }).addTo(lmap),
       )
     }
+    for (const m of journeyMarks(j)) {
+      const icon = L.divIcon({ className: 'jr-pin', html: `<span style="background:${m.color}">${m.n}</span>`, iconSize: [26, 26], iconAnchor: [13, 13] })
+      lLines.push(
+        L.marker([m.lat, m.lon], { icon, interactive: false, zIndexOffset: 1000 })
+          .bindTooltip(m.title, { direction: 'top', offset: [0, -12] })
+          .addTo(lmap) as unknown as L.Polyline,
+      )
+    }
   }
+  document.getElementById('map-legend')?.toggleAttribute('hidden', !j)
 }
 
 function pickedCard(): string {
@@ -544,7 +635,14 @@ async function runSearch(): Promise<void> {
   renderPanel()
   renderMap()
   const j = journeys[0]
-  if (j) fitPts(j.legs.flatMap(legPts))
+  if (j) {
+    fitPts(j.legs.flatMap(legPts))
+    // スマホでは地図が上に固定されているので、結果の先頭（地図のすぐ下）まで戻して経路を見せる
+    if (window.matchMedia('(max-width: 899px)').matches) {
+      const card = panel.querySelector<HTMLElement>('.jr-card')
+      if (card) panel.scrollTo({ top: Math.max(0, card.offsetTop - 8), behavior: 'smooth' })
+    }
+  }
 }
 
 /** 行き先の候補（この画面のデマンド交通で降りられる場所＋読み込んだ路線バスの停留所） */

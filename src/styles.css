@@ -1234,3 +1234,41 @@ a.link-a:hover { background: var(--green-tint); }
 .jr-add { margin-top: 10px; font-size: 14px; }
 .jr-add summary { cursor: pointer; color: var(--green-deep); font-weight: 700; }
 .jr-add-row { display: grid; gap: 8px; margin-top: 6px; color: var(--ink-2); }
+
+/* 地図の凡例（経路を描いているときだけ） */
+.map-legend {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 500;
+  display: flex;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink-2);
+  pointer-events: none;
+}
+.map-legend[hidden] { display: none; }
+.map-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.map-legend .lg { display: inline-block; width: 22px; height: 0; border-top: 5px solid; border-radius: 3px; }
+.map-legend .lg-bus { border-color: #4a80e0; }
+.map-legend .lg-flex { border-top-style: dashed; border-color: #d2437f; }
+.map-legend .lg-walk { border-top-style: dotted; border-color: #4f6656; }
+/* 経路の番号つきの印（Leaflet） */
+.jr-pin span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  font-family: var(--font);
+}
