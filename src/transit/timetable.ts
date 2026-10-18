@@ -204,11 +204,60 @@ function readCalendars(files: Record<string, string>): Map<string, TCalendar> {
   return cals
 }
 
+/** 1行を列に分ける。引用符が無ければ split だけで済ませる（stop_times.txt は百万行になるので速さ優先） */
+function splitCsvLine(line: string): string[] {
+  if (!line.includes('"')) return line.split(',')
+  const cells: string[] = []
+  let cell = ''
+  let inQuote = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (inQuote) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cell += '"'
+          i++
+        } else inQuote = false
+      } else cell += ch
+    } else if (ch === '"') inQuote = true
+    else if (ch === ',') {
+      cells.push(cell)
+      cell = ''
+    } else cell += ch
+  }
+  cells.push(cell)
+  return cells
+}
+
+/** 大きな CSV の本文（見出しの次の行から）を、行オブジェクトを作らずに1行ずつ回す */
+function eachCsvLine(text: string, fn: (cells: string[]) => void): void {
+  let pos = text.indexOf('\n') + 1 // 見出し行を飛ばす
+  if (pos <= 0) return
+  while (pos < text.length) {
+    let end = text.indexOf('\n', pos)
+    if (end < 0) end = text.length
+    let line = text.slice(pos, end)
+    pos = end + 1
+    if (line.endsWith('\r')) line = line.slice(0, -1)
+    if (line.trim() === '') continue
+    fn(splitCsvLine(line))
+  }
+}
+
+export interface FixedFeedOptions {
+  /**
+   * この箱 [西, 南, 東, 北] に停留所が1つも無い便は読み飛ばす。
+   * 都営バスのように都内全域の時刻表（stop_times が 75MB）でも、見ている地域の便だけを持てばスマホで動く。
+   * 便に含まれる停留所は箱の外でも全部残す（箱の外へ行く便もそのまま乗れる）
+   */
+  within?: [number, number, number, number]
+}
+
 /**
  * 時刻の決まった GTFS（路線バス・鉄道など）を足す。
  * 戻り値は読めた便数（0 なら時刻表として使えない）。
  */
-export function addFixedFeed(tt: Timetable, files: Record<string, string>, source: Omit<TSource, 'kind'>): number {
+export function addFixedFeed(tt: Timetable, files: Record<string, string>, source: Omit<TSource, 'kind'>, opts: FixedFeedOptions = {}): number {
   const feed = tt.sources.length
   tt.sources.push({ kind: 'fixed', ...source })
   tt.calendars[feed] = readCalendars(files)
@@ -238,38 +287,92 @@ export function addFixedFeed(tt: Timetable, files: Record<string, string>, sourc
     trips.set(r.trip_id, { routeId: r.route_id, serviceId: r.service_id, headsign: r.trip_headsign ?? '', shapeId: r.shape_id || undefined })
   }
 
-  // 走る道筋（shapes.txt）。地図に道路に沿った線を描くためだけに使う
-  const shapeRows = new Map<string, { seq: number; lat: number; lon: number }[]>()
-  for (const r of table('shapes.txt')) {
-    const lat = Number(r.shape_pt_lat)
-    const lon = Number(r.shape_pt_lon)
-    if (!r.shape_id || !Number.isFinite(lat) || !Number.isFinite(lon)) continue
-    const list = shapeRows.get(r.shape_id) ?? []
-    list.push({ seq: Number(r.shape_pt_sequence), lat, lon })
-    shapeRows.set(r.shape_id, list)
-  }
-  for (const [id, rows] of shapeRows) {
-    rows.sort((a, b) => a.seq - b.seq)
-    tt.shapes.set(`${feed}:${id}`, rows.map((x) => [x.lat, x.lon] as [number, number]))
-  }
-
-  // stop_times を便ごとにまとめる
+  // stop_times を便ごとにまとめる。何十 MB にもなるので行オブジェクトを作らず1行ずつ読む
   interface Row {
     seq: number
     stop: number
     arr: number
     dep: number
   }
+  const stText = files['stop_times.txt'] ?? ''
+  const col = (header: string[], name: string): number => header.indexOf(name)
+  const headerOf = (text: string): string[] =>
+    splitCsvLine((text.split('\n', 1)[0] ?? '').replace(/^﻿/, '').replace(/\r$/, '')).map((h) => h.trim())
+
+  // 箱の指定があれば、まず「箱の中の停留所を通る便」だけ拾う（1回目の読み）
+  let keep: Set<string> | null = null
+  if (opts.within) {
+    const [w, s, e, n] = opts.within
+    const inBox = (i: number): boolean => {
+      const st = tt.stops[i]
+      return st.lon >= w && st.lon <= e && st.lat >= s && st.lat <= n
+    }
+    const set = new Set<string>()
+    const header = headerOf(stText)
+    const iTrip = col(header, 'trip_id')
+    const iStop = col(header, 'stop_id')
+    if (iTrip >= 0 && iStop >= 0) {
+      eachCsvLine(stText, (c) => {
+        const stop = tt.stopIndex.get(`${feed}:${(c[iStop] ?? '').trim()}`)
+        if (stop !== undefined && inBox(stop)) set.add((c[iTrip] ?? '').trim())
+      })
+    }
+    keep = set
+  }
+
   const byTrip = new Map<string, Row[]>()
-  for (const r of table('stop_times.txt')) {
-    const stop = tt.stopIndex.get(`${feed}:${r.stop_id}`)
-    if (stop === undefined) continue
-    const arr = parseTime(r.arrival_time) ?? parseTime(r.departure_time)
-    const dep = parseTime(r.departure_time) ?? arr
-    if (arr === undefined || dep === undefined) continue // 時刻の無い行（通過・補間待ち）は飛ばす
-    const list = byTrip.get(r.trip_id) ?? []
-    list.push({ seq: Number(r.stop_sequence), stop, arr, dep })
-    byTrip.set(r.trip_id, list)
+  {
+    const header = headerOf(stText)
+    const iTrip = col(header, 'trip_id')
+    const iStop = col(header, 'stop_id')
+    const iSeq = col(header, 'stop_sequence')
+    const iArr = col(header, 'arrival_time')
+    const iDep = col(header, 'departure_time')
+    if (iTrip >= 0 && iStop >= 0) {
+      eachCsvLine(stText, (c) => {
+        const tripId = (c[iTrip] ?? '').trim()
+        if (keep && !keep.has(tripId)) return
+        const stop = tt.stopIndex.get(`${feed}:${(c[iStop] ?? '').trim()}`)
+        if (stop === undefined) return
+        const arr = parseTime(c[iArr]) ?? parseTime(c[iDep])
+        const dep = parseTime(c[iDep]) ?? arr
+        if (arr === undefined || dep === undefined) return // 時刻の無い行（通過・補間待ち）は飛ばす
+        const list = byTrip.get(tripId) ?? []
+        list.push({ seq: Number(c[iSeq]), stop, arr, dep })
+        byTrip.set(tripId, list)
+      })
+    }
+  }
+
+  // 走る道筋（shapes.txt）。地図に道路に沿った線を描くためだけに使う。残す便のものだけ持つ
+  const usedShapes = new Set<string>()
+  for (const tripId of byTrip.keys()) {
+    const sid = trips.get(tripId)?.shapeId
+    if (sid) usedShapes.add(sid)
+  }
+  const shapeRows = new Map<string, { seq: number; lat: number; lon: number }[]>()
+  if (files['shapes.txt'] && usedShapes.size > 0) {
+    const header = headerOf(files['shapes.txt'])
+    const iId = col(header, 'shape_id')
+    const iLat = col(header, 'shape_pt_lat')
+    const iLon = col(header, 'shape_pt_lon')
+    const iSeq = col(header, 'shape_pt_sequence')
+    if (iId >= 0 && iLat >= 0 && iLon >= 0) {
+      eachCsvLine(files['shapes.txt'], (c) => {
+        const id = (c[iId] ?? '').trim()
+        if (!usedShapes.has(id)) return
+        const lat = Number(c[iLat])
+        const lon = Number(c[iLon])
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return
+        const list = shapeRows.get(id) ?? []
+        list.push({ seq: Number(c[iSeq]), lat, lon })
+        shapeRows.set(id, list)
+      })
+    }
+  }
+  for (const [id, rows] of shapeRows) {
+    rows.sort((a, b) => a.seq - b.seq)
+    tt.shapes.set(`${feed}:${id}`, rows.map((x) => [x.lat, x.lon] as [number, number]))
   }
 
   const patternOf = new Map<string, number>()

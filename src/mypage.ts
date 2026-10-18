@@ -16,6 +16,7 @@ import { buildZip, downloadBytes } from './gtfs/zip'
 import { savePreview } from './preview'
 import { areaColor } from './areaColors'
 import { hasPersonalKey, hasPublicKey, setGoogleMapsKey } from './mapsKey'
+import { hasOdptToken, setOdptToken } from './odptToken'
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -104,6 +105,18 @@ function render(): void {
             ? '運営側のキーで Google 表示中 ✓'
             : '未設定（地理院地図で表示中）'
       }</p>
+    </section>
+
+    <section class="mp-card">
+      <h2>路線バスの時刻表（乗りつぎ検索）</h2>
+      <p>住民ページの乗りつぎ検索は、国の GTFS データリポジトリと公共交通オープンデータセンター（ODPT）で<b>誰でも使える形で公開されている時刻表</b>（都営バス・市町村のコミュニティバスなど）を、場所に合わせて自動で読み込みます。設定は要りません。</p>
+      <p>西武バス・西東京バス・京王バスなど「公共交通オープンデータ基本ライセンス」のデータは、ODPT の開発者サイトで登録して得た<b>アクセストークン</b>が要ります。下に入れると<b>この端末だけ</b>で使えます（トークンはサーバにもサイトにも送られません。索引に入っているデータに限ります）。</p>
+      <div class="mp-actions">
+        <input type="password" id="odpt-token" class="mp-key-input" placeholder="ODPT のアクセストークン" autocomplete="off">
+        <button type="button" class="secondary" data-act="otoken-save">保存</button>
+        ${hasOdptToken() ? '<button type="button" class="secondary small" data-act="otoken-clear">この端末の設定を消す</button>' : ''}
+      </div>
+      <p class="check-small">状態：${hasOdptToken() ? 'この端末にトークンあり（基本ライセンスのデータも使います）✓' : '未設定（認証なしで公開されている時刻表だけで調べます）'}</p>
     </section>
 
     <section class="mp-card mp-mock">
@@ -222,6 +235,20 @@ app.addEventListener('click', (e) => {
     }
     case 'gkey-clear':
       setGoogleMapsKey('')
+      render()
+      break
+    case 'otoken-save': {
+      const input = document.getElementById('odpt-token') as HTMLInputElement | null
+      if (!input) return
+      if (!setOdptToken(input.value)) {
+        window.alert('トークンの形式が違うようです（英数字の長い文字列）。')
+        return
+      }
+      render()
+      break
+    }
+    case 'otoken-clear':
+      setOdptToken('')
       render()
       break
     case 'mock':

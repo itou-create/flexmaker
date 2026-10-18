@@ -139,7 +139,7 @@ Flex で増えるのは4ファイル。他は通常の GTFS と同じ。
 - **このツールの乗りつぎ検索（2026-10-17）**：`src/transit/`。路線バス等の固定路線は国交省 **GTFS データリポジトリ**
   （https://www.gtfs-data.jp/ ）から取る。一覧 API `https://api.gtfs-data.jp/v2/feeds`（607件・2026-10-17）と
   zip `https://api.gtfs-data.jp/v2/organizations/<org>/feeds/<feed>/files/feed.zip?rid=current`（S3 へ 302）は
-  **どちらも CORS 許可**でブラウザから直接読める。ODPT の `api-public.odpt.org` は CORS 無し。
+  **どちらも CORS 許可**でブラウザから直接読める。ODPT の `api-public.odpt.org` は JSON API には CORS が無いが、**files（zip）は 302 → Azure Blob で CORS 許可・Range 可**（2026-10-18 確認。都営バス GTFS をブラウザから直接読めた）。基本ライセンスのデータ（`api.odpt.org`）はトークン必須・再配布禁止（基本ライセンス第8条4）。
   瑞穂町はコミュニティバス（`mizuhotown/communitybus`）と Flex（`mizuhotown/DemandResponsiveTransport`）の両方を
   リポジトリにも登録している。宗像市・平川市・川越町・紀の川市・安中市も路線バスを登録済み（Flex は ODPT 側のみ）
 

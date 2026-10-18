@@ -28,7 +28,21 @@ import {
 } from './transit/timetable.ts'
 import { searchNextDays, type Journey, type Leg, type Pt } from './transit/router.ts'
 import { journeysHtml } from './transit/journeyView.ts'
-import { REPO_TOP_URL, feedKey, loadFeedIndex, loadRepoFeed, pickNearbyFeeds, type IndexedFeed, type RepoFeed } from './transit/sources.ts'
+import {
+  ODPT_TOP_URL,
+  REPO_TOP_URL,
+  boxAround,
+  feedKey,
+  feedSiteUrl,
+  isOdpt,
+  loadFeedIndex,
+  loadRepoFeed,
+  pickNearbyFeeds,
+  type IndexedFeed,
+  type LoadedFeed,
+  type RepoFeed,
+} from './transit/sources.ts'
+import { hasOdptToken } from './odptToken.ts'
 
 interface DemoSource {
   municipality: string
@@ -116,8 +130,10 @@ let ttBuilding: Promise<Timetable> | null = null
 /** いまの時刻表に入れた固定路線の組（キーの並び）。場所が変わって組が変われば組み直す */
 let ttFeedKeys = ''
 /** 読み込んだ固定路線の状態（表示用）。'none' は時刻表の無いデータ（デマンド等）で読み飛ばしたもの */
-let feedStatus: { feed: RepoFeed; state: 'loading' | 'ok' | 'fail' | 'none'; detail?: string }[] = []
-const loadedFiles = new Map<string, Record<string, string>>()
+let feedStatus: { feed: RepoFeed; state: 'loading' | 'ok' | 'fail' | 'none'; detail?: string; fetchedAt?: number }[] = []
+const loadedFiles = new Map<string, LoadedFeed>()
+/** 時刻表に残す便の範囲（検索地点を囲む箱）の余白。乗り換えが少し外の停留所でも起きるよう広めに */
+const WITHIN_MARGIN_M = 5000
 let journeys: Journey[] | null = null
 /** 指定日に無く、別の日の結果を出しているとき、その日 */
 let shiftedDate: Date | null = null
@@ -599,10 +615,16 @@ function searchPts(): { lat: number; lon: number }[] {
  */
 async function fixedFeeds(): Promise<IndexedFeed[]> {
   const index = (await loadFeedIndex()).filter((f) => !f.flex)
-  return pickNearbyFeeds(index, searchPts())
+  return pickNearbyFeeds(index, searchPts(), { allowToken: hasOdptToken() })
 }
 
-async function buildTimetable(feeds: IndexedFeed[]): Promise<Timetable> {
+/** 便を残す範囲の箱。桁を丸めて、少し動いただけでは組み直さないようにする */
+function withinBox(): [number, number, number, number] {
+  const r = (v: number): number => Math.round(v * 50) / 50 // 0.02 度（約 2km）刻み
+  return boxAround(searchPts(), WITHIN_MARGIN_M).map(r) as [number, number, number, number]
+}
+
+async function buildTimetable(feeds: IndexedFeed[], within: [number, number, number, number]): Promise<Timetable> {
   const t = createTimetable()
   const s = data.source
   addFlexView(t, data.view, {
@@ -618,20 +640,26 @@ async function buildTimetable(feeds: IndexedFeed[]): Promise<Timetable> {
   for (const st of feedStatus) {
     const key = feedKey(st.feed)
     try {
-      let files = loadedFiles.get(key)
-      if (!files) {
-        files = await loadRepoFeed(st.feed)
-        loadedFiles.set(key, files)
+      let loaded = loadedFiles.get(key)
+      if (!loaded) {
+        loaded = await loadRepoFeed(st.feed)
+        loadedFiles.set(key, loaded)
       }
-      const n = addFixedFeed(t, files, {
-        label: st.feed.label,
-        provider: st.feed.provider,
-        url: REPO_TOP_URL,
-        license: st.feed.license,
-        licenseUrl: st.feed.licenseUrl,
-      })
+      const n = addFixedFeed(
+        t,
+        loaded.files,
+        {
+          label: st.feed.label,
+          provider: st.feed.provider,
+          url: feedSiteUrl(st.feed),
+          license: st.feed.license,
+          licenseUrl: st.feed.licenseUrl,
+        },
+        { within },
+      )
       st.state = n > 0 ? 'ok' : 'none'
       st.detail = n > 0 ? `${n}便` : '時刻表なし'
+      st.fetchedAt = loaded.fetchedAt
     } catch (e) {
       st.state = 'fail'
       st.detail = e instanceof Error ? e.message : String(e)
@@ -647,9 +675,10 @@ function ensureTimetable(): Promise<Timetable> {
   if (ttBuilding) return ttBuilding
   ttBuilding = (async () => {
     const feeds = await fixedFeeds()
-    const keys = feeds.map(feedKey).join('|')
+    const within = withinBox()
+    const keys = `${feeds.map(feedKey).join('|')}@${within.join(',')}`
     if (tt && keys === ttFeedKeys) return tt
-    const t = await buildTimetable(feeds)
+    const t = await buildTimetable(feeds, within)
     tt = t
     ttFeedKeys = keys
     return t
@@ -687,18 +716,34 @@ async function runSearch(): Promise<void> {
   }
 }
 
-/** 見つからなかった理由を言葉にする。乗り場までの距離が主な原因なので、それを先に伝える */
+/**
+ * 見つからなかった理由を言葉にする。乗り場までの距離が主な原因なので、それを先に伝える。
+ * 「バス停の目の前なのに遠いと言われる」のは、そのバス会社の時刻表が公開されていない（＝この画面に
+ * 入っていない）ときなので、何の時刻表で調べたかも添える。
+ */
 function whyNoResult(t: Timetable): string {
   if (!picked || !dest) return ''
-  const nearestM = (p: { lat: number; lon: number }): number =>
-    t.stops.reduce((best, st) => Math.min(best, distanceM(p.lat, p.lon, st.lat, st.lon)), Infinity)
+  const nearest = (p: { lat: number; lon: number }): { m: number; name: string } => {
+    let best = { m: Infinity, name: '' }
+    for (const st of t.stops) {
+      const m = distanceM(p.lat, p.lon, st.lat, st.lon)
+      if (m < best.m) best = { m, name: st.name }
+    }
+    return best
+  }
   const km = (m: number): string => (m >= 9500 ? String(Math.round(m / 1000)) : (m / 1000).toFixed(1))
-  const o = nearestM(picked)
-  const d = nearestM(dest)
+  const o = nearest(picked)
+  const d = nearest(dest)
   const inZone = data.view.areas.some((a) => a.board.zones.some((z) => insideZone(picked!.lat, picked!.lon, z.rings)))
   const limit = `${(ACCESS_M / 1000).toFixed(1)}km`
-  if (o > ACCESS_M && !inZone) return `乗りたい場所から、いちばん近い乗り場まで約${km(o)}km あります（歩ける目安は ${limit} まで）。もう少し乗り場の近くを押してみてください。`
-  if (d > ACCESS_M) return `行き先から、いちばん近い乗り場・停留所まで約${km(d)}km あります（歩ける目安は ${limit} まで）。行き先を乗り場の近くにしてみてください。`
+  const used = [area.name || 'このデマンド交通', ...feedStatus.filter((st) => st.state === 'ok').map((st) => st.feed.label)]
+  const usedNote = `この画面で調べられるのは <b>${used.map(esc).join('・')}</b> の時刻表です。ほかの会社のバス停は、その会社が時刻表を公開していないとここでは調べられません。`
+  if (o.m > ACCESS_M && !inZone) {
+    return `乗りたい場所から、調べられる乗り場・停留所までは約${km(o.m)}km あります（いちばん近いのは「${esc(o.name)}」。歩ける目安は ${limit} まで）。${usedNote}`
+  }
+  if (d.m > ACCESS_M) {
+    return `行き先から、調べられる乗り場・停留所までは約${km(d.m)}km あります（いちばん近いのは「${esc(d.name)}」。歩ける目安は ${limit} まで）。${usedNote}`
+  }
   return ''
 }
 
@@ -765,10 +810,13 @@ function feedStatusHtml(): string {
   }
   const lines = shown.map((st) => {
     const mark = st.state === 'ok' ? '✓' : st.state === 'fail' ? '✕' : '…'
-    const txt = st.state === 'loading' ? '読み込んでいます' : st.state === 'ok' ? `（${st.detail}）` : '読み込めませんでした'
-    return `<li class="${st.state}"><b>${mark}</b> ${esc(st.feed.label)}${txt}</li>`
+    const got = st.fetchedAt ? `、${new Date(st.fetchedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} 取得` : ''
+    const txt = st.state === 'loading' ? '読み込んでいます' : st.state === 'ok' ? `（${st.detail}${got}）` : '読み込めませんでした'
+    const name = st.feed.label.includes(st.feed.provider) ? st.feed.label : `${st.feed.provider} ${st.feed.label}`
+    return `<li class="${st.state}"><b>${mark}</b> ${esc(name)}${txt}</li>`
   })
-  return `<details class="jr-add"><summary>乗りつぎに使っている時刻表（近くのものを自動で選んでいます）</summary><ul class="jr-feeds">${lines.join('')}</ul></details>`
+  return `<details class="jr-add"><summary>乗りつぎに使っている時刻表（近くのものを自動で選んでいます）</summary><ul class="jr-feeds">${lines.join('')}</ul>
+    <p class="check-small">載っているのは、国のリポジトリと公共交通オープンデータセンターで公開されている時刻表です。公開されていないバス会社の路線は調べられません。</p></details>`
 }
 
 function searchCard(): string {
@@ -834,15 +882,27 @@ function searchCard(): string {
 }
 
 /** 乗り継ぎに使った路線バス等の出典（CC BY の表示義務） */
+/**
+ * 乗りつぎ検索に使った時刻表の出典。CC BY の表示に加え、ODPT のデータを使ったときは
+ * 開発者ガイドライン 3.1 の3点（センター提供のデータであること・正確性の保証が無いこと・
+ * 事業者に直接問い合わせないこと）を書く。
+ */
 function fixedSourcesHtml(): string {
   const ok = feedStatus.filter((st) => st.state === 'ok')
   if (ok.length === 0) return ''
+  const sites = [
+    ok.some((st) => !isOdpt(st.feed)) ? `<a href="${REPO_TOP_URL}" target="_blank" rel="noopener">GTFS データリポジトリ</a>` : '',
+    ok.some((st) => isOdpt(st.feed)) ? `<a href="${ODPT_TOP_URL}" target="_blank" rel="noopener">公共交通オープンデータセンター</a>` : '',
+  ].filter(Boolean)
+  const odptNote = ok.some((st) => isOdpt(st.feed))
+    ? `<p>公共交通オープンデータセンターのデータは、交通事業者が提供したものを元にしていますが、正確・完全とは限りません。このページの表示内容について、交通事業者へ直接のお問い合わせはしないでください（お問い合わせはこのページの作成元へ）。</p>`
+    : ''
   return `<p>乗りつぎ検索の時刻表：${ok
     .map(
       (st) =>
         `${esc(st.feed.provider)}「${esc(st.feed.label)}」${st.feed.license ? `（<a href="${esc(st.feed.licenseUrl ?? '#')}" target="_blank" rel="noopener">${esc(st.feed.license)}</a>）` : ''}`,
     )
-    .join('、')}／ <a href="${REPO_TOP_URL}" target="_blank" rel="noopener">GTFS データリポジトリ</a>から取得。時刻は変わることがあります。</p>`
+    .join('、')}／ ${sites.join('・')}から取得。時刻は変わることがあります。</p>${odptNote}`
 }
 
 function renderPanel(): void {
