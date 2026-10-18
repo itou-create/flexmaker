@@ -1272,3 +1272,16 @@ a.link-a:hover { background: var(--green-tint); }
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   font-family: var(--font);
 }
+
+/* よく行く場所のボタン */
+.jr-quick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.jr-quick-label { font-size: 13px; color: var(--ink-2); }
+.jr-chip-btn {
+  padding: 8px 14px;
+  font-size: 15px;
+  border-radius: 999px;
+  border: 2px solid var(--green-soft);
+  background: var(--green-tint);
+  color: var(--green-deep);
+}
+.jr-chip-btn:hover { background: var(--green-soft); }

@@ -14,7 +14,7 @@ import { normalizeView, type FlexView, type ViewArea, type ViewStop } from './gt
 import { loadPreview } from './preview'
 import { areaColor } from './areaColors'
 import { bookingText, daysText, windowsText } from './viewText'
-import { bookingNow } from './bookingNow'
+import { bookingNow, runsOn } from './bookingNow'
 import { getGoogleMapsKey } from './mapsKey'
 import { createGoogleMap, gapi } from './gmaps'
 import type { NoticeItem } from './types'
@@ -26,7 +26,7 @@ import {
   legPath,
   type Timetable,
 } from './transit/timetable.ts'
-import { search, type Journey, type Leg, type Pt } from './transit/router.ts'
+import { searchNextDays, type Journey, type Leg, type Pt } from './transit/router.ts'
 import { journeysHtml } from './transit/journeyView.ts'
 import { REPO_TOP_URL, feedKey, loadFeedIndex, loadRepoFeed, pickNearbyFeeds, type IndexedFeed, type RepoFeed } from './transit/sources.ts'
 
@@ -119,8 +119,12 @@ let ttFeedKeys = ''
 let feedStatus: { feed: RepoFeed; state: 'loading' | 'ok' | 'fail' | 'none'; detail?: string }[] = []
 const loadedFiles = new Map<string, Record<string, string>>()
 let journeys: Journey[] | null = null
+/** 指定日に無く、別の日の結果を出しているとき、その日 */
+let shiftedDate: Date | null = null
 /** 見つからなかったときの理由（出発地・行き先が乗り場から遠いなど） */
 let noResultHint = ''
+/** 歩ける距離の目安（m）。出発地→乗り場、停留所→行き先 */
+const ACCESS_M = 1500
 let searching = false
 let selectedJourney = 0
 const nowRounded = ((): { date: string; time: string } => {
@@ -130,6 +134,39 @@ const nowRounded = ((): { date: string; time: string } => {
   return { date: `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`, time: `${p2(d.getHours())}:${p2(d.getMinutes())}` }
 })()
 const when = { ...nowRounded }
+const p2 = (n: number): string => String(n).padStart(2, '0')
+const ymdDash = (d: Date): string => `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`
+const DOW = '日月火水木金土'
+const dateLabel = (d: Date): string => `${d.getMonth() + 1}月${d.getDate()}日（${DOW[d.getDay()]}）`
+
+/**
+ * 検索の初期日時：いま走っていればいま、きょうの運行が終わっていたり運休なら「次に走る日の始発」。
+ * 夜や運休日に開いても、最初の検索で何か出るようにする。
+ */
+function pickDefaultWhen(): void {
+  const now = new Date()
+  const lastEnd = Math.max(0, ...area.windows.map((w) => parseHm(w.end)))
+  const nowMin = now.getHours() * 60 + now.getMinutes()
+  if (runsOn(area, now) && nowMin + 30 < lastEnd) {
+    when.date = nowRounded.date
+    when.time = nowRounded.time
+    return
+  }
+  for (let i = 1; i <= 14; i++) {
+    const d = new Date(now)
+    d.setDate(d.getDate() + i)
+    if (runsOn(area, d)) {
+      when.date = ymdDash(d)
+      const first = Math.min(...area.windows.map((w) => parseHm(w.start)))
+      when.time = Number.isFinite(first) ? `${p2(Math.floor(first / 60))}:${p2(first % 60)}` : '08:00'
+      return
+    }
+  }
+}
+function parseHm(t: string): number {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t)
+  return m ? Number(m[1]) * 60 + Number(m[2]) : 0
+}
 
 // ── 地図エンジン ─────────────────────────────
 // Google マップ（運営側キーがあり Maps JavaScript API が使えるとき）を優先し、
@@ -631,7 +668,9 @@ async function runSearch(): Promise<void> {
   const [y, mo, d] = when.date.split('-').map(Number)
   const [h, mi] = when.time.split(':').map(Number)
   const date = new Date(y, mo - 1, d)
-  journeys = search(t, { ...picked, name: '乗りたい場所' }, dest, { date, depSec: h * 3600 + mi * 60 })
+  const res = searchNextDays(t, { ...picked, name: '乗りたい場所' }, dest, { date, depSec: h * 3600 + mi * 60, accessM: ACCESS_M })
+  journeys = res.journeys
+  shiftedDate = res.shifted ? res.date : null
   noResultHint = journeys.length === 0 ? whyNoResult(t) : ''
   selectedJourney = 0
   searching = false
@@ -657,9 +696,28 @@ function whyNoResult(t: Timetable): string {
   const o = nearestM(picked)
   const d = nearestM(dest)
   const inZone = data.view.areas.some((a) => a.board.zones.some((z) => insideZone(picked!.lat, picked!.lon, z.rings)))
-  if (o > 1200 && !inZone) return `乗りたい場所から、いちばん近い乗り場まで約${km(o)}km あります（歩ける目安は 1.2km まで）。もう少し乗り場の近くを押してみてください。`
-  if (d > 1200) return `行き先から、いちばん近い乗り場・停留所まで約${km(d)}km あります（歩ける目安は 1.2km まで）。行き先を乗り場の近くにしてみてください。`
+  const limit = `${(ACCESS_M / 1000).toFixed(1)}km`
+  if (o > ACCESS_M && !inZone) return `乗りたい場所から、いちばん近い乗り場まで約${km(o)}km あります（歩ける目安は ${limit} まで）。もう少し乗り場の近くを押してみてください。`
+  if (d > ACCESS_M) return `行き先から、いちばん近い乗り場・停留所まで約${km(d)}km あります（歩ける目安は ${limit} まで）。行き先を乗り場の近くにしてみてください。`
   return ''
+}
+
+/** よく行く場所：病院・駅・役場などを名前から拾う（デマンドの降り場を優先、足りなければバス停） */
+function quickDestinations(): { name: string; lat: number; lon: number }[] {
+  const KEYS = ['病院', '駅', '役場', '庁舎', '市役所', '町役場', '医院', 'クリニック', 'センター', 'スーパー', '郵便局', '図書館']
+  const out: { name: string; lat: number; lon: number }[] = []
+  const seen = new Set<string>()
+  const consider = (name: string, lat: number, lon: number): void => {
+    if (out.length >= 6 || seen.has(name) || !KEYS.some((k) => name.includes(k))) return
+    if (picked && distanceM(picked.lat, picked.lon, lat, lon) < 150) return // 目の前の場所は候補にしない
+    seen.add(name)
+    out.push({ name, lat, lon })
+  }
+  for (const k of KEYS) {
+    for (const st of data.view.areas.flatMap((a) => a.alight.stops)) if (st.name.includes(k)) consider(st.name, st.lat, st.lon)
+  }
+  if (tt) for (const k of KEYS) for (const st of tt.stops) if (st.feed > 0 && st.name.includes(k)) consider(st.name, st.lat, st.lon)
+  return out
 }
 
 /** 行き先の候補（この画面のデマンド交通で降りられる場所＋読み込んだ路線バスの停留所） */
@@ -723,7 +781,15 @@ function searchCard(): string {
   } else if (pickMode === 'dest') {
     destLine = `<p class="check-big jr-picking">上の地図で<b>「行き先」を指で押して</b>ください。<button type="button" class="jr-mini" data-act="cancel-dest">やめる</button></p>`
   } else {
+    const quick = quickDestinations()
     destLine = `<div class="jr-dest-pick">
+      ${
+        quick.length
+          ? `<div class="jr-quick"><span class="jr-quick-label">よく行く場所：</span>${quick
+              .map((q) => `<button type="button" class="jr-chip-btn" data-act="quick-dest" data-lat="${q.lat}" data-lon="${q.lon}" data-name="${esc(q.name)}">${esc(q.name)}</button>`)
+              .join('')}</div>`
+          : ''
+      }
       <button type="button" class="jr-btn" data-act="pick-dest">🗺 行き先を地図で押す</button>
       <label class="jr-or">または、場所の名前から
         <select data-act="dest-stop" class="jr-select"><option value="">選んでください</option>${destOptions()}</select>
@@ -742,7 +808,12 @@ function searchCard(): string {
   if (dest) {
     if (searching) result = `<p class="check-big">調べています…</p>`
     else if (journeys && journeys.length > 0) {
-      result = `${pastNote}<div class="jr-list">${journeysHtml(journeys, (i) => tt?.stops[i]?.name ?? '')}</div>
+      const [sy, sm, sd] = when.date.split('-').map(Number)
+      const asked = new Date(sy, sm - 1, sd)
+      const shiftNote = shiftedDate
+        ? `<p class="check-no"><b>${esc(dateLabel(asked))} ${esc(when.time)}</b> には行き方がありません。次に行けるのは <b>${esc(dateLabel(shiftedDate))}</b> です。</p>`
+        : `<p class="check-small">${esc(dateLabel(asked))} の行き方です。</p>`
+      result = `${shiftNote}${pastNote}<div class="jr-list">${journeysHtml(journeys, (i) => tt?.stops[i]?.name ?? '')}</div>
         <p class="check-small">所要時間や歩く時間は目安です。デマンド交通は呼んでから迎えが来るまでを約5分、走る速さを約25km/hとして見積もっています。乗りかえには2分の余裕を見ています。</p>`
     } else if (journeys) {
       result = `<p class="check-no check-big">この日時では、行き方が見つかりませんでした。</p>
@@ -876,6 +947,12 @@ function onSearchAction(btn: HTMLElement): void {
       document.getElementById('map-hint')?.setAttribute('hidden', '')
       renderPanel()
       break
+    case 'quick-dest':
+      dest = { lat: Number(btn.dataset.lat), lon: Number(btn.dataset.lon), name: btn.dataset.name ?? '行き先' }
+      pickMode = 'origin'
+      void runSearch()
+      renderMap()
+      break
     case 'clear-dest':
       dest = null
       journeys = null
@@ -923,6 +1000,7 @@ async function main(): Promise<void> {
     sub.textContent = `${data.source!.municipality}「${data.source!.serviceName}」`
     document.title = `うちから乗れる？ — ${data.source!.serviceName}`
   }
+  pickDefaultWhen()
   // 文面を先に出してから地図を起こす（Google の判定に1〜2秒かかるため）
   renderPanel()
   await mountMap()

@@ -342,3 +342,27 @@ export function search(tt: Timetable, origin: Pt, dest: Pt, opts: SearchOptions)
   }
   return out.slice(0, 3)
 }
+
+export interface SearchResult {
+  journeys: Journey[]
+  /** 実際に探した日（指定日に無ければ後ろの日） */
+  date: Date
+  /** 指定日に行き方が無く、別の日の結果を返したとき true */
+  shifted: boolean
+}
+
+/**
+ * 指定の日時で探し、無ければ翌日以降（最大 days 日）を朝から探して最初に見つかった日を返す。
+ * 「きょうは運休」「もう終バスが出た」でも、利用者に何かしらの行き方を見せるため。
+ */
+export function searchNextDays(tt: Timetable, origin: Pt, dest: Pt, opts: SearchOptions, days = 7): SearchResult {
+  const first = search(tt, origin, dest, opts)
+  if (first.length > 0) return { journeys: first, date: opts.date, shifted: false }
+  for (let i = 1; i <= days; i++) {
+    const d = new Date(opts.date)
+    d.setDate(d.getDate() + i)
+    const js = search(tt, origin, dest, { ...opts, date: d, depSec: 5 * 3600 })
+    if (js.length > 0) return { journeys: js, date: d, shifted: true }
+  }
+  return { journeys: [], date: opts.date, shifted: false }
+}

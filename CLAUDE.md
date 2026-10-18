@@ -215,6 +215,11 @@ buildZip() → downloadBytes()  src/gtfs/zip.ts          ← 無圧縮 zip、依
   - 時刻表モデルは `src/transit/timetable.ts`（固定路線は pattern に束ね、Flex は FlexView から直接載せる）。
     zip 展開は `src/gtfs/zipReader.ts`（DecompressionStream、依存ゼロ）→ ロードマップ3「zip のままの読み込み」の部品は完成
   - 表示文言は `src/transit/journeyView.ts`。CC BY の出典表示は住民ページ末尾に自動で足す
+  - **「経路が出ない」対策（2026-10-18、伊藤さん指摘）**：運休日・夜に開くと「いま」基準では何も出ないため、
+    (1) 初期日時は「次に走る日の始発」（`pickDefaultWhen`）、(2) 指定日に無ければ翌日以降7日を朝から探して
+    「次に行けるのは◯日」として出す（`searchNextDays`）、(3) 歩ける目安 1.5km（`ACCESS_M`）、
+    (4) 病院・駅・役場などを名前から拾った「よく行く場所」ボタンでワンタップ検索。
+    瑞穂町のランダム地点60組で測ると、日曜20時起点で 0/30 → 29/30 に改善（scratchpad の eval.mts）
 - **プレビュー連携（2026-09-26）**：作成画面の「住民ページで見る」→ `check.html#preview`。
   受け渡しは `src/preview.ts`（localStorage 経由・サーバ不要）。中身は flexWriter → flexReader を
   通した FlexView なので、zip に入るものと同じ解釈で表示される。区域だけの形態（乗り場ゼロ）は
